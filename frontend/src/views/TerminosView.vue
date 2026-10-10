@@ -13,7 +13,7 @@
       <hr class="divider" />
       <div><strong>5. Uso correcto.</strong><p class="sub">Prohibido usar CTD para actividades ilícitas, intentar vulnerar su seguridad, automatizar accesos abusivos o registrar datos de terceros sin su consentimiento.</p></div>
       <hr class="divider" />
-      <div><strong>6. Disponibilidad.</strong><p class="sub">CTD se ofrece “tal cual”, con funcionamiento básico sin conexión donde sea viable. Hacemos respaldos razonables, pero te recomendamos exportar tu información periódicamente desde Ajustes.</p></div>
+      <div><strong>6. Disponibilidad.</strong><p class="sub">CTD se ofrece “tal cual”. La app abre sin conexión, pero tus cifras se consultan al servidor en el momento: sin internet no se ven saldos ni movimientos. Exporta tu información desde Ajustes para tener una copia propia.</p></div>
       <hr class="divider" />
       <div><strong>7. Privacidad.</strong><p class="sub">El tratamiento de tus datos se rige por nuestra <a href="#" @click.prevent="$router.push('/datos')">Política de Tratamiento de Datos</a> (Ley 1581 de 2012).</p></div>
       <hr class="divider" />

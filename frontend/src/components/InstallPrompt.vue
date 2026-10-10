@@ -1,24 +1,26 @@
 <template>
-  <div v-if="visible" class="install-bar">
+  <div v-if="mostrarBanner" class="install-bar">
     <Logo :width="36" />
-    <div style="flex: 1"><strong>Instala CTD</strong><small>Acceso rápido y funciona sin conexión.</small></div>
+    <div style="flex: 1"><strong>Instala CTD</strong><small>Acceso rápido, abre al instante y con los datos ya guardados.</small></div>
     <button class="btn-mint" @click="instalar">Instalar</button>
-    <button class="btn-ghost" style="color: #fff; border-color: rgba(255,255,255,.3)" @click="cerrar">No</button>
+    <button class="btn-ghost" style="color: #fff; border-color: rgba(255,255,255,.3)" @click="descartar">No</button>
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import Logo from './Logo.vue'
-const visible = ref(false)
-let deferred: { prompt: () => void } | null = null
+import { usePwaInstall } from '../composables/usePwaInstall'
+const { mostrarBanner, instalar, descartar, capturar, rescatar } = usePwaInstall()
+function alInstalar() {
+  rescatar()
+}
 onMounted(() => {
-  if (localStorage.getItem('ctd-install-no')) return
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault()
-    deferred = e as unknown as { prompt: () => void }
-    visible.value = true
-  })
+  rescatar()
+  window.addEventListener('beforeinstallprompt', capturar)
+  window.addEventListener('ctd:instalable', alInstalar)
 })
-async function instalar() { visible.value = false; deferred?.prompt(); deferred = null }
-function cerrar() { visible.value = false; localStorage.setItem('ctd-install-no', '1') }
+onUnmounted(() => {
+  window.removeEventListener('beforeinstallprompt', capturar)
+  window.removeEventListener('ctd:instalable', alInstalar)
+})
 </script>

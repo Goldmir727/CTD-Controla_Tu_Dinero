@@ -34,19 +34,25 @@
       <p class="sub" v-if="m.faltante > 0">Te faltan ${{ fmt(m.faltante) }}<span v-if="m.ahorro_requerido_mensual != null"> · ${{ fmt(m.ahorro_requerido_mensual) }}/mes (estimación)</span><span v-else> · Sin fecha: aporta a tu ritmo</span></p>
       <p class="sub" v-else>¡Meta cumplida!</p>
     </section>
+    <section class="card-featured" style="margin-top: 12px; cursor: pointer" @click="$router.push('/asesor')">
+      <div class="eyebrow" style="color: var(--mint)">ASESOR IA · PRO</div>
+      <div style="font-weight: 800; font-size: 17px">¿Cómo voy este mes? Pregunta con tus números.</div>
+      <span class="glow-line"></span>
+    </section>
   </main>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import api from '../services/api'
+import { numero } from '../utils/formato'
 const nombre = ref('')
 const disponible = ref(0)
 const ingresos = ref(0); const gastos = ref(0); const balance = ref(0)
 const tasa = ref<number | null>(null)
 const metas = ref<{ id: string; nombre: string; porcentaje: number; faltante: number; ahorro_requerido_mensual: number | null; imagen_url?: string | null }[]>([])
 const mes = new Date().toISOString().slice(0, 7)
-const fmt = (n: number) => Number(n ?? 0).toLocaleString('es-CO')
+const fmt = (n: number) => numero(n)
 const mesLabel = new Date().toLocaleDateString('es-CO', { month: 'long' }).toUpperCase()
 const saludo = new Date().getHours() < 12 ? 'Buenos días' : new Date().getHours() < 19 ? 'Buenas tardes' : 'Buenas noches'
 onMounted(async () => {

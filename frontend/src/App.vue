@@ -21,11 +21,16 @@
     </div>
     <button v-if="showFab" class="fab" @click="fan = true">+</button>
     <nav v-if="authed" class="bottom-nav">
-      <router-link to="/inicio">Inicio</router-link>
-      <router-link to="/movimientos">Movs</router-link>
-      <span style="width: 56px"></span>
-      <router-link to="/plan">Plan</router-link>
-      <router-link to="/analisis">Datos</router-link>
+      <div class="nav-side">
+        <router-link to="/inicio">Inicio</router-link>
+        <router-link to="/movimientos">Movs</router-link>
+      </div>
+      <span class="fab-gap"></span>
+      <div class="nav-side">
+        <router-link to="/plan">Plan</router-link>
+        <router-link to="/analisis">Datos</router-link>
+        <router-link to="/asesor">Asesor</router-link>
+      </div>
     </nav>
   </div>
 </template>

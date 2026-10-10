@@ -11,6 +11,15 @@
     <meta name="twitter:card" content="summary" />
     <link rel="icon" href="./icons/favicon.ico" />
     <title>CTD - Controla Tu Dinero</title>
+    <script>
+      // Guarda el prompt de instalación ANTES de que arranque Vue (sin carreras)
+      window.__ctdInstallEvt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__ctdInstallEvt = e;
+        window.dispatchEvent(new CustomEvent('ctd:instalable'));
+      });
+    </script>
   </head>
   <body>
     <div id="app"></div>

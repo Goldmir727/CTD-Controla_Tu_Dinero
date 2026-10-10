@@ -16,6 +16,7 @@ const router = createRouter({
     { path: '/movimientos/nuevo', component: () => import('../views/NuevoMovimientoView.vue') },
     { path: '/plan', component: () => import('../views/PlanView.vue') },
     { path: '/analisis', component: () => import('../views/AnalisisView.vue') },
+    { path: '/asesor', component: () => import('../views/AsesorView.vue') },
     { path: '/config', component: () => import('../views/ConfigView.vue') }
   ]
 })

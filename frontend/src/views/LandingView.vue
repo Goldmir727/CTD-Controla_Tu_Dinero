@@ -114,6 +114,7 @@ import type { Ref } from 'vue'
 import Reveal from '../components/Reveal.vue'
 import { animacionesOff } from '../composables/usePerf'
 import { useAuth } from '../stores/auth'
+import { numero } from '../utils/formato'
 const auth = useAuth()
 const authed = computed(() => auth.isAuthed)
 const lite = document.documentElement.dataset.perf !== 'full'
@@ -128,7 +129,7 @@ const bal = computed(() => dIng.value - dGas.value)
 const balPct = computed(() => (dIng.value > 0 ? Math.round((bal.value / dIng.value) * 100) : 0))
 const metaPct = computed(() => Math.min(Math.round((dAhor.value / demo.objetivo) * 100), 100))
 const metaFalt = computed(() => Math.max(demo.objetivo - dAhor.value, 0))
-const fmt = (n: number) => Number(n ?? 0).toLocaleString('es-CO')
+const fmt = (n: number) => numero(n)
 function tween(target: Ref<number>, to: number) {
   if (animacionesOff()) {
     target.value = to

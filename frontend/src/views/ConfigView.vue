@@ -4,9 +4,23 @@
 
     <div class="eyebrow">MI CUENTA</div>
     <button class="item" @click="toggle('perfil')">
-      <span><i class="bi bi-person-circle"></i> {{ me.nombre }}<br /><small>{{ correoMask }}</small></span><span>›</span>
+      <span style="display: flex; gap: 10px; align-items: center">
+        <img v-if="me.foto_url" :src="me.foto_url" alt="Tu foto" class="avatar" />
+        <i v-else class="bi bi-person-circle" style="font-size: 34px"></i>
+        <span>{{ me.nombre }}<br /><small>{{ correoMask }}</small></span>
+      </span><span>›</span>
     </button>
     <div v-if="open === 'perfil'" class="panel">
+      <div style="text-align: center">
+        <img v-if="me.foto_url" :src="me.foto_url" alt="Tu foto" class="avatar-lg" />
+        <div>
+          <button class="link" @click="fotoInput?.click()">Cambiar foto</button>
+          <span v-if="me.foto_url"> · </span>
+          <button v-if="me.foto_url" class="link" @click="quitarFoto">Quitar</button>
+        </div>
+        <input ref="fotoInput" type="file" accept="image/*" hidden @change="elegirFoto" />
+        <p v-if="err.foto" class="alert">{{ err.foto }}</p>
+      </div>
       <input v-model="nombreEdit" placeholder="Nombre" class="input" />
       <button class="btn-mint" :disabled="busy.perfil" @click="guardarPerfil">
         <span v-if="busy.perfil" class="spinner"></span>Guardar nombre
@@ -168,6 +182,21 @@
         <span v-if="busy.update" class="spinner"></span>Buscar actualizaciones
       </button>
     </div>
+    <div class="item" style="cursor: default; align-items: flex-start">
+      <span>Instalar en el teléfono<br /><small>{{ instalarHint }}</small></span>
+      <button v-if="!appInstalada" class="btn-mint" @click="instalarAhora">Instalar</button>
+      <span v-else class="done-flag">INSTALADA ✓</span>
+    </div>
+    <p v-if="instalarMsg" class="sub">{{ instalarMsg }}</p>
+    <button class="item" @click="toggle('pwa')"><span>Estado de instalación</span><span>›</span></button>
+    <div v-if="open === 'pwa'" class="panel">
+      <div v-for="c in diag" :key="c.label" class="line">
+        <span>{{ c.ok === null ? '○' : c.ok ? '✓' : '✗' }} {{ c.label }}<br /><small>{{ c.detalle }}</small></span>
+      </div>
+      <button class="btn-ghost" :disabled="busy.pwa" @click="revisarPwa">
+        <span v-if="busy.pwa" class="spinner"></span>Revisar ahora
+      </button>
+    </div>
 
     <div class="eyebrow">LEGAL</div>
     <button class="item" @click="$router.push('/terminos')"><span>Términos y Condiciones</span><span>›</span></button>
@@ -185,12 +214,16 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
+import { numero } from '../utils/formato'
 import { useAuth } from '../stores/auth'
 import { useTema } from '../composables/useTema'
+import { usePwaInstall } from '../composables/usePwaInstall'
 import { usePwaUpdate } from '../composables/usePwaUpdate'
+import { archivoADataURL } from '../composables/useFoto'
 const router = useRouter()
 const auth = useAuth()
-const me = ref({ nombre: '', correo: '', moneda: 'COP' })
+const me = ref({ nombre: '', correo: '', moneda: 'COP', foto_url: null as string | null })
+const fotoInput = ref<HTMLInputElement | null>(null)
 const cuentas = ref<{ id: string; nombre: string; tipo: string; saldo_actual: number }[]>([])
 const cats = ref<{ id: string; nombre: string; tipo: string; activa: boolean }[]>([])
 const metodos = ref<{ id: string; nombre: string }[]>([])
@@ -200,6 +233,25 @@ const open = ref('')
 const version = __APP_VERSION__
 const msgUpdate = ref('Al día')
 const { hayUpdate, buscando, buscar } = usePwaUpdate()
+const { disponible: puedeInstalar, yaInstalada: appInstalada, esIOS, instalar: instalarApp, rescatar: rescatarInstall, diagnosticar } = usePwaInstall()
+const diag = ref<{ ok: boolean | null; label: string; detalle: string }[]>([])
+const instalarMsg = ref('')
+const instalarHint = computed(() =>
+  appInstalada.value ? 'Ya la tienes instalada.'
+  : puedeInstalar.value ? 'Un toque y queda en tu pantalla principal.'
+  : esIOS ? 'En Safari: Compartir → Añadir a pantalla de inicio.'
+  : 'Si no sale el aviso, abre el menú ⋮ del navegador → Instalar app.'
+)
+async function instalarAhora() {
+  instalarMsg.value = ''
+  const ok = await instalarApp()
+  if (!ok && !esIOS) instalarMsg.value = 'El navegador aún no lo ofrece: abre su menú ⋮ → “Instalar app” o “Añadir a pantalla principal”.'
+}
+async function revisarPwa() {
+  busy.pwa = true
+  try { diag.value = await diagnosticar() }
+  finally { busy.pwa = false }
+}
 const { tema, aplicar: setTema } = useTema()
 const semana = ref(localStorage.getItem('ctd-semana') || 'Lunes')
 const nombreEdit = ref('')
@@ -212,10 +264,10 @@ const div = reactive({ origen: '', nombre: '', monto: null as number | null })
 const ncat = reactive({ nombre: '', tipo: 'gasto' })
 const nmet = ref('')
 const impModo = ref('agregar')
-const busy = reactive({ perfil: false, moneda: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, twofa: false, logout: false, update: false, reset: false })
+const busy = reactive({ perfil: false, moneda: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
 const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '' })
-const err = reactive({ correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', twofa: '', reset: '' })
-const fmt = (n: number) => Number(n ?? 0).toLocaleString('es-CO')
+const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', twofa: '', reset: '' })
+const fmt = (n: number) => numero(n)
 const correoMask = computed(() => {
   const [u = '', d = ''] = me.value.correo.split('@')
   if (!d) return me.value.correo
@@ -239,6 +291,24 @@ async function recargar() {
 async function guardarPerfil() {
   busy.perfil = true; msg.perfil = ''
   try { await api.patch('/auth/me', { nombre: nombreEdit.value }); me.value.nombre = nombreEdit.value; msg.perfil = 'Nombre actualizado.' }
+  finally { busy.perfil = false }
+}
+async function elegirFoto(ev: Event) {
+  const file = (ev.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  busy.perfil = true; err.foto = ''
+  try {
+    const url = await archivoADataURL(file)
+    if (url.length > 300_000) { err.foto = 'Foto muy pesada.'; return }
+    await api.patch('/auth/me', { foto_url: url })
+    me.value.foto_url = url
+    msg.perfil = 'Foto actualizada.'
+  } catch { err.foto = 'No se pudo subir la foto.'; }
+  finally { busy.perfil = false; if (fotoInput.value) fotoInput.value.value = '' }
+}
+async function quitarFoto() {
+  busy.perfil = true
+  try { await api.patch('/auth/me', { foto_url: null }); me.value.foto_url = null }
   finally { busy.perfil = false }
 }
 async function guardarMoneda() {
@@ -377,7 +447,7 @@ async function buscarUpdate() {
   }, 4500)
 }
 
-onMounted(async () => { await recargar() })
+onMounted(async () => { rescatarInstall(); await recargar() })
 </script>
 
 <style>

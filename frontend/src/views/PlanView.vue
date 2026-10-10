@@ -80,6 +80,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
+import { numero } from '../utils/formato'
 type Cat = { id: string; nombre: string; tipo: string }
 const tab = ref<'p' | 'm'>('p')
 const mes = ref(new Date().toISOString().slice(0, 7))
@@ -92,7 +93,7 @@ const dragOver = ref('')
 const fileInputs = reactive<Record<string, HTMLInputElement | null>>({})
 const np = reactive({ categoria_id: '', monto: null as number | null })
 const nm = reactive({ nombre: '', objetivo: null as number | null, fecha_objetivo: '' })
-const fmt = (n: number) => Number(n ?? 0).toLocaleString('es-CO')
+const fmt = (n: number) => numero(n)
 const usados = computed(() => new Set(presupuestos.value.map((b) => b.categoria_id)))
 const catsGastoDisponibles = computed(() => cats.value.filter((c) => (c.tipo === 'gasto' || c.tipo === 'ambos') && !usados.value.has(c.id)))
 

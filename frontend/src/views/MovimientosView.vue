@@ -39,13 +39,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import api from '../services/api'
+import { numero } from '../utils/formato'
 type Mov = { id: string; tipo: string; monto: number; fecha: string; descripcion: string; categoria_id?: string; cuenta_id?: string; categoria?: string; cuenta?: string }
 const filtro = ref('todos'); const q = ref(''); const mes = ref(new Date().toISOString().slice(0, 7))
 const items = ref<Mov[]>([]); const cuentas = ref<{ id: string; nombre: string }[]>([]); const categorias = ref<{ id: string; nombre: string }[]>([])
 const sheet = ref(false); const cuentaId = ref(''); const categoriaId = ref(''); const orden = ref('recientes')
 const loading = ref(true)
 const label = (f: string) => f === 'todos' ? 'Todos' : f === 'ingreso' ? 'Ingresos' : 'Gastos'
-const fmt = (n: number) => Number(n).toLocaleString('es-CO')
+const fmt = (n: number) => numero(n)
 const cuentaNombre = computed(() => cuentas.value.find((c) => c.id === cuentaId.value)?.nombre ?? 'todas')
 const categoriaNombre = computed(() => categorias.value.find((c) => c.id === categoriaId.value)?.nombre ?? 'todas')
 async function cargar() {

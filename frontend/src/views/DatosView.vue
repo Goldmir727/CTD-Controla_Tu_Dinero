@@ -11,7 +11,7 @@
       <hr class="divider" />
       <div><strong>4. Tus saldos son opcionales.</strong><p class="sub">Pedirte “cuánto dinero tienes hoy” tiene un único propósito: calcular tu DISPONIBLE inicial. Puedes dejarlo en 0 y usar CTD solo para ver tus ingresos y gastos del mes. Nada se comparte por registrarlo.</p></div>
       <hr class="divider" />
-      <div><strong>5. Dónde se guardan y cómo se protegen.</strong><p class="sub">Infraestructura en la nube con cifrado en tránsito (HTTPS) y controles de acceso por usuario: cada cuenta solo ve sus datos. Conservamos tu información mientras tu cuenta exista y hasta 5 años después de eliminarla por obligaciones legales, salvo que pidas supresión antes.</p></div>
+      <div><strong>5. Dónde se guardan y cómo se protegen.</strong><p class="sub">Infraestructura en la nube con cifrado en tránsito (HTTPS) y controles de acceso por usuario: cada cuenta solo ve sus datos. El historial de tus chats con el Asesor se guarda para darte continuidad y puedes borrarlo cuando quieras. Conservamos tu información mientras tu cuenta exista y hasta 5 años después de eliminarla por obligaciones legales, salvo que pidas supresión antes.</p></div>
       <hr class="divider" />
       <div><strong>6. Tus derechos (art. 8, Ley 1581).</strong><p class="sub">Conocer, actualizar, rectificar y suprimir tus datos; revocar tu autorización; presentar quejas ante la Superintendencia de Industria y Comercio. Escríbenos a contacto@ctd.app: respondemos consultas en 10 días hábiles y reclamos en 15 (Ley 1581, art. 14-15).</p></div>
       <hr class="divider" />
