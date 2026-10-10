@@ -65,11 +65,12 @@ def _validar_refs(db: Session, user_id: str, tipo: str,
 def listar(activo: bool | None = None, db: Session = Depends(get_db),
            user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Lista los fijos con su equivalencia mensual, más los totales del mes."""
-    q = db.query(Recurring).filter_by(user_id=user.id)
+    q = db.query(Recurring).filter_by(user_id=user.id, perfil_id=perfil.id)
     if activo is not None:
         q = q.filter_by(activo=activo)
     detalle = {d["id"]: d for d in fin.fijos_mensuales(db, user.id)["detalle"]}
-    cats = {c.id: c.nombre for c in db.query(Category).filter_by(user_id=user.id).all()}
+    cats = {c.id: c.nombre for c in
+           db.query(Category).filter_by(user_id=user.id, perfil_id=perfil.id).all()}
     items = []
     for r in q.order_by(Recurring.tipo, Recurring.nombre).all():
         d = detalle.get(r.id, {})
@@ -80,13 +81,13 @@ def listar(activo: bool | None = None, db: Session = Depends(get_db),
             "cuenta_id": r.cuenta_id, "categoria_id": r.categoria_id,
             "categoria": cats.get(r.categoria_id), "nota": r.nota,
         })
-    return {"items": items, "resumen": _resumen(db, user.id)}
+    return {"items": items, "resumen": _resumen(db, user.id, perfil.id)}
 
 
-def _resumen(db: Session, user_id: str, mes: str | None = None) -> dict:
+def _resumen(db: Session, user_id: str, perfil_id: str, mes: str | None = None) -> dict:
     mes = mes or fin.mes_actual()
-    f = fin.fijos_mensuales(db, user_id)
-    r = fin.ratio_fijo(db, user_id, mes)
+    f = fin.fijos_mensuales(db, user_id, perfil_id)
+    r = fin.ratio_fijo(db, user_id, perfil_id, mes)
     return {"mes": mes, "ingresos_fijos_mes": f["ingresos_fijos_mes"],
             "gastos_fijos_mes": f["gastos_fijos_mes"], "neto_fijo_mes": f["neto_fijo_mes"],
             "cantidad": f["cantidad"], "ratio_fijo": r["ratio_fijo"],
@@ -97,20 +98,20 @@ def _resumen(db: Session, user_id: str, mes: str | None = None) -> dict:
 def resumen(mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
             db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Totales de fijos y qué porcentaje de tus gastos del mes está comprometido."""
-    return _resumen(db, user.id, mes)
+    return _resumen(db, user.id, perfil.id, mes)
 
 
 @router.get("/recurrentes/proyeccion")
 def proyeccion(meses: int = 6, db: Session = Depends(get_db),
                user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Balance esperado mes a mes. Reutiliza el motor, no recalcula."""
-    if not db.query(Recurring).filter_by(user_id=user.id).first():
+    if not db.query(Recurring).filter_by(user_id=user.id, perfil_id=perfil.id).first():
         raise HTTPException(
             422,
             "Primero marca tus ingresos y gastos fijos en Plan › Fijos. "
             "Sin eso la proyección solo tendría en cuenta tu promedio.",
         )
-    return fin.proyeccion(db, user.id, fin.mes_actual(), meses)
+    return fin.proyeccion(db, user.id, perfil.id, fin.mes_actual(), meses)
 
 
 @router.post("/recurrentes", status_code=201)
@@ -129,7 +130,7 @@ def crear(data: RecurrenteIn, db: Session = Depends(get_db),
 @router.patch("/recurrentes/{rec_id}")
 def editar(rec_id: str, data: RecurrentePatch, db: Session = Depends(get_db),
            user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    r = db.query(Recurring).filter_by(id=rec_id, user_id=user.id).first()
+    r = db.query(Recurring).filter_by(id=rec_id, user_id=user.id, perfil_id=perfil.id).first()
     if not r:
         raise HTTPException(404, "Fijo no encontrado")
     campos = data.model_dump(exclude_unset=True)
@@ -146,7 +147,7 @@ def editar(rec_id: str, data: RecurrentePatch, db: Session = Depends(get_db),
 @router.patch("/recurrentes/{rec_id}/toggle")
 def toggle(rec_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Activa/desactiva sin borrar: asi un arriendo temporal se pausa, no se pierde."""
-    r = db.query(Recurring).filter_by(id=rec_id, user_id=user.id).first()
+    r = db.query(Recurring).filter_by(id=rec_id, user_id=user.id, perfil_id=perfil.id).first()
     if not r:
         raise HTTPException(404, "Fijo no encontrado")
     r.activo = not r.activo
@@ -156,7 +157,7 @@ def toggle(rec_id: str, db: Session = Depends(get_db), user: User = Depends(get_
 
 @router.delete("/recurrentes/{rec_id}", status_code=204)
 def borrar(rec_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    r = db.query(Recurring).filter_by(id=rec_id, user_id=user.id).first()
+    r = db.query(Recurring).filter_by(id=rec_id, user_id=user.id, perfil_id=perfil.id).first()
     if not r:
         raise HTTPException(404, "Fijo no encontrado")
     db.delete(r)

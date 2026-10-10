@@ -5,6 +5,10 @@ const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? '/api/v1' })
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem('access_token')
   if (t) c.headers.Authorization = `Bearer ${t}`
+  // Perfil activo (Personal / Negocio). Va en header para no tocar ninguna URL:
+  // el backend lo lee de X-Perfil-Id y aplica el filtro a todas las consultas.
+  const p = localStorage.getItem('ctd-perfil')
+  if (p) c.headers['X-Perfil-Id'] = p
   return c
 })
 

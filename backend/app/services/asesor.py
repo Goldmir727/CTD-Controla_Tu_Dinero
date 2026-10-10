@@ -43,7 +43,7 @@ miles y sin símbolo (1780000 -> 1.780.000). No uses espacios finos como
 separador ni commas de miles (nunca 1,480,000 ni "1 480 000")."""
 
 
-def contexto(db: Session, user_id: str, mes: str, moneda: str = "COP") -> str:
+def contexto(db: Session, user_id: str, perfil_id: str, mes: str, moneda: str = "COP") -> str:
     from app.api.v1.recurrentes import _resumen
     from app.services.formato import fecha_es, numero_es, porcentaje
 
@@ -65,22 +65,24 @@ def contexto(db: Session, user_id: str, mes: str, moneda: str = "COP") -> str:
         f"(tasa de ahorro {porcentaje(tasa_ahorro(ing, bal))}).",
     ]
     # Ingresos y gastos fijos: el chatbot no puede razonar sobre compromisos sin esto.
-    fijos = _resumen(db, user_id, mes)
+    fijos = _resumen(db, user_id, perfil_id, mes)
     if fijos["cantidad"]:
         lineas.append(
             f"Fijos declarados: ingresos {numero_es(fijos['ingresos_fijos_mes'])}, "
             f"gastos {numero_es(fijos['gastos_fijos_mes'])}, "
             f"neto {numero_es(fijos['neto_fijo_mes'])} al mes. "
             f"El {porcentaje(fijos['ratio_fijo'])} de sus gastos del mes son fijos.")
-    for b in db.query(Budget).filter_by(user_id=user_id, periodo=mes).all():
+    for b in db.query(Budget).filter_by(user_id=user_id, perfil_id=perfil_id,
+                            periodo=mes).all():
         g = float(db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
-            Transaction.user_id == user_id, Transaction.categoria_id == b.categoria_id,
+            Transaction.user_id == user_id, Transaction.perfil_id == perfil_id,
+            Transaction.categoria_id == b.categoria_id,
             Transaction.tipo == "gasto", func.to_char(Transaction.fecha, "YYYY-MM") == mes).scalar() or 0)
         cat = db.get(Category, b.categoria_id)
         lineas.append(f"Presupuesto {cat.nombre if cat else '?'}: gastado {numero_es(g)} "
                       f"de {numero_es(float(b.monto))} "
                       f"({porcentaje(presupuesto_porcentaje(float(b.monto), g))}).")
-    for m in db.query(Goal).filter_by(user_id=user_id).all():
+    for m in db.query(Goal).filter_by(user_id=user_id, perfil_id=perfil_id).all():
         ah = float(db.query(func.coalesce(func.sum(GoalAporte.monto), 0)).filter_by(goal_id=m.id).scalar() or 0)
         fal = meta_faltante(float(m.objetivo), ah)
         mr = meses_restantes(m.fecha_objetivo, date.today())
@@ -91,7 +93,8 @@ def contexto(db: Session, user_id: str, mes: str, moneda: str = "COP") -> str:
                       f"requerido {req_txt}.")
     top = db.query(Category.nombre, func.coalesce(func.sum(Transaction.monto), 0)).join(
         Transaction, Transaction.categoria_id == Category.id).filter(
-        Transaction.user_id == user_id, Transaction.tipo == "gasto").group_by(
+        Transaction.user_id == user_id, Transaction.perfil_id == perfil_id,
+        Transaction.tipo == "gasto").group_by(
         Category.nombre).order_by(func.sum(Transaction.monto).desc()).limit(3).all()
     if top:
         lineas.append("Top gasto histórico: " + ", ".join(f"{n} {numero_es(t)}" for n, t in top) + ".")
@@ -140,8 +143,8 @@ def _armar(messages: list[dict], max_tokens: int, con_tools: bool) -> dict:
 
 
 def preguntar(mensaje: str, ctx: str, db: Session | None = None,
-              user_id: str | None = None, mes: str | None = None,
-              historial: list | None = None) -> tuple[str, int]:
+              user_id: str | None = None, perfil_id: str | None = None,
+              mes: str | None = None, historial: list | None = None) -> tuple[str, int]:
     """Responde usando herramientas contra el motor de calculo.
 
     Sin db/user_id cae al modo sin herramientas (util para pruebas); con ellos, el
@@ -150,7 +153,7 @@ def preguntar(mensaje: str, ctx: str, db: Session | None = None,
     if not settings.openai_api_key:
         raise RuntimeError("Asesor no configurado: falta OPENAI_API_KEY.")
     tope = settings.asesor_max_tokens
-    usar_tools = db is not None and user_id is not None
+    usar_tools = db is not None and user_id is not None and perfil_id is not None
 
     base = [{"role": "system",
              "content": f"{SYSTEM}\n\nCONTEXTO DEL USUARIO:\n{ctx}"}]
@@ -183,7 +186,7 @@ def preguntar(mensaje: str, ctx: str, db: Session | None = None,
                 args = {}
             from app.services.asesor_tools import ejecutar
 
-            resultado = ejecutar(nombre, args, db, user_id, mes)
+            resultado = ejecutar(nombre, args, db, user_id, perfil_id, mes)
             base.append({"role": "tool", "tool_call_id": c.get("id"),
                          "content": json.dumps(resultado, ensure_ascii=False)})
 

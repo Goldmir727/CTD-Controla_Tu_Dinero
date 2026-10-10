@@ -13,7 +13,8 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_perfil
+from app.models.perfil import Perfil
 from app.core.plan import PLANES, require_plan
 from app.models.finance import Account, Category, PaymentMethod, Transaction
 from app.models.goals import Goal, GoalAporte
@@ -72,10 +73,11 @@ def _por_categoria(db: Session, user_id: str, tipo: str) -> dict:
 @router.get("/reportes/categorias")
 def categorias(tipo: str = Query("gasto", pattern="^(gasto|ingreso)$"),
                desde: str | None = None, hasta: str | None = None,
-               db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+               db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Dona de distribución + tendencia por categoría. Es el gráfico de tu referencia."""
     dist = _por_categoria(db, user.id, tipo)
-    nombres = {str(c.id): c.nombre for c in db.query(Category).filter_by(user_id=user.id).all()}
+    nombres = {str(c.id): c.nombre for c in
+             db.query(Category).filter_by(user_id=user.id, perfil_id=perfil.id).all()}
     # Tendencia: cada categoría mes a mes, para la línea bajo la dona.
     hasta_mes = hasta or fin.mes_actual()
     meses = _meses(12, hasta_mes)
@@ -84,7 +86,7 @@ def categorias(tipo: str = Query("gasto", pattern="^(gasto|ingreso)$"),
         func.to_char(Transaction.fecha, "YYYY-MM").label("m"),
         Transaction.categoria_id,
         func.sum(Transaction.monto).label("total"),
-    ).filter(Transaction.user_id == user.id, Transaction.tipo == tipo,
+    ).filter(Transaction.user_id == user.id, Transaction.perfil_id == perfil.id, Transaction.tipo == tipo,
              func.to_char(Transaction.fecha, "YYYY-MM") >= desde_mes,
              func.to_char(Transaction.fecha, "YYYY-MM") <= hasta_mes,
              ).group_by("m", Transaction.categoria_id).all()
@@ -108,7 +110,7 @@ def categorias(tipo: str = Query("gasto", pattern="^(gasto|ingreso)$"),
 
 @router.get("/reportes/comparativa")
 def comparativa(meses: int = 6, db: Session = Depends(get_db),
-                user: User = Depends(get_current_user)):
+                user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Ingresos vs gastos vs balance, mes a mes. Barras agrupadas."""
     meses = max(2, min(meses, 24))
     claves = _meses(meses, fin.mes_actual())
@@ -116,7 +118,7 @@ def comparativa(meses: int = 6, db: Session = Depends(get_db),
         func.to_char(Transaction.fecha, "YYYY-MM").label("m"),
         func.sum(case((Transaction.tipo == "ingreso", Transaction.monto), else_=0)),
         func.sum(case((Transaction.tipo == "gasto", Transaction.monto), else_=0)),
-    ).filter(Transaction.user_id == user.id).group_by("m").all()
+    ).filter(Transaction.user_id == user.id, Transaction.perfil_id == perfil.id).group_by("m").all()
     por_mes = {r[0]: (float(r[1] or 0), float(r[2] or 0)) for r in agg}
     items = []
     for k in claves:
@@ -130,7 +132,7 @@ def comparativa(meses: int = 6, db: Session = Depends(get_db),
 
 
 @router.get("/reportes/fijos")
-def fijos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def fijos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Apilado: cuanto de cada mes son gastos fijos y cuanto variable."""
     meses = max(2, min(meses, 24))
     claves = _meses(meses, fin.mes_actual())
@@ -139,7 +141,7 @@ def fijos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(ge
         func.to_char(Transaction.fecha, "YYYY-MM").label("m"),
         func.sum(case((Transaction.tipo == "gasto", Transaction.monto), else_=0)),
         func.sum(case((Transaction.tipo == "ingreso", Transaction.monto), else_=0)),
-    ).filter(Transaction.user_id == user.id).group_by("m").all()
+    ).filter(Transaction.user_id == user.id, Transaction.perfil_id == perfil.id).group_by("m").all()
     por_mes = {r[0]: (float(r[2] or 0), float(r[1] or 0)) for r in agg}
     items = []
     for k in claves:
@@ -156,7 +158,7 @@ def fijos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(ge
 
 
 @router.get("/reportes/metodos")
-def metodos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def metodos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """En que metodo de pago se va el dinero."""
     meses = max(2, min(meses, 24))
     claves = _meses(meses, fin.mes_actual())
@@ -164,7 +166,7 @@ def metodos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(
         Transaction.metodo_id,
         func.sum(case((Transaction.tipo == "gasto", Transaction.monto), else_=0)),
         func.sum(case((Transaction.tipo == "ingreso", Transaction.monto), else_=0)),
-    ).filter(Transaction.user_id == user.id).group_by(Transaction.metodo_id).all()
+    ).filter(Transaction.user_id == user.id, Transaction.perfil_id == perfil.id).group_by(Transaction.metodo_id).all()
     nombres = {m.id: m.nombre for m in db.query(PaymentMethod).filter_by(user_id=user.id).all()}
     filas = [{"metodo_id": mid, "nombre": nombres.get(mid, "Sin método"),
               "gastos": float(g or 0), "ingresos": float(i or 0)} for mid, g, i in agg]
@@ -177,7 +179,7 @@ def metodos(meses: int = 6, db: Session = Depends(get_db), user: User = Depends(
 
 @router.get("/reportes/calendario")
 def calendario(mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
-               db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+               db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Mapa de calor dia x categoria, para la vista Calendario."""
     mes = mes or fin.mes_actual()
     y, m = int(mes[:4]), int(mes[5:7])
@@ -189,7 +191,7 @@ def calendario(mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[
         dia_col,
         Transaction.tipo,
         func.sum(Transaction.monto).label("total"),
-    ).filter(Transaction.user_id == user.id,
+    ).filter(Transaction.user_id == user.id, Transaction.perfil_id == perfil.id,
              func.to_char(Transaction.fecha, "YYYY-MM") == mes).group_by(dia_col, Transaction.tipo).all()
     por_dia: dict[int, dict] = {}
     for dia, tipo, total in filas:
@@ -203,7 +205,7 @@ def calendario(mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[
         dias.append(fila)
     metas = [{"id": g.id, "nombre": g.nombre, "objetivo": float(g.objetivo),
               "fecha_objetivo": str(g.fecha_objetivo) if g.fecha_objetivo else None}
-             for g in db.query(Goal).filter_by(user_id=user.id).all()]
+             for g in db.query(Goal).filter_by(user_id=user.id, perfil_id=perfil.id).all()]
     aportes = db.query(GoalAporte.goal_id, func.sum(GoalAporte.monto)).filter(
         GoalAporte.user_id == user.id).group_by(GoalAporte.goal_id).all()
     por_meta = {g: float(t or 0) for g, t in aportes}
@@ -216,7 +218,7 @@ def calendario(mes: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[
 
 @router.get("/reportes/ranking")
 def ranking(dim: str = Query("categoria", pattern="^(categoria|cuenta)$"), meses: int = 3,
-            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+            db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Top N con delta contra el periodo anterior: "esto subio 40%"."""
     meses = max(1, min(meses, 12))
     claves = _meses(meses, fin.mes_actual())
@@ -228,14 +230,16 @@ def ranking(dim: str = Query("categoria", pattern="^(categoria|cuenta)$"), meses
 
     if dim == "categoria":
         campo = Transaction.categoria_id
-        nombres = {str(c.id): c.nombre for c in db.query(Category).filter_by(user_id=user.id).all()}
+        nombres = {str(c.id): c.nombre for c in
+             db.query(Category).filter_by(user_id=user.id, perfil_id=perfil.id).all()}
     else:
         campo = Transaction.cuenta_id
-        nombres = {str(a.id): a.nombre for a in db.query(Account).filter_by(user_id=user.id).all()}
+        nombres = {str(a.id): a.nombre for a in
+            db.query(Account).filter_by(user_id=user.id, perfil_id=perfil.id).all()}
 
     def _agg(desde: str, hasta: str) -> dict:
         filas = db.query(campo, func.sum(Transaction.monto)).filter(
-            Transaction.user_id == user.id, Transaction.tipo == "gasto",
+            Transaction.user_id == user.id, Transaction.perfil_id == perfil.id, Transaction.tipo == "gasto",
             func.to_char(Transaction.fecha, "YYYY-MM") >= desde,
             func.to_char(Transaction.fecha, "YYYY-MM") <= hasta,
         ).group_by(campo).all()

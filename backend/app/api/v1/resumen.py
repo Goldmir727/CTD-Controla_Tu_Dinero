@@ -3,7 +3,8 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_perfil
+from app.models.perfil import Perfil
 from app.models.finance import Account, Category, Transaction
 from app.models.goals import Goal
 from app.models.user import User
@@ -14,16 +15,16 @@ router = APIRouter(tags=["resumen"])
 
 
 @router.get("/resumen")
-def resumen(mes: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def resumen(mes: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     ing = float(db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
-        Transaction.user_id == user.id, Transaction.tipo == "ingreso",
+        Transaction.user_id == user.id, Transaction.perfil_id == perfil.id, Transaction.tipo == "ingreso",
         func.to_char(Transaction.fecha, "YYYY-MM") == mes).scalar() or 0)
     gas = float(db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
-        Transaction.user_id == user.id, Transaction.tipo == "gasto",
+        Transaction.user_id == user.id, Transaction.perfil_id == perfil.id, Transaction.tipo == "gasto",
         func.to_char(Transaction.fecha, "YYYY-MM") == mes).scalar() or 0)
     bal = balance_mes(ing, gas)
     por_cuenta = []
-    for a in db.query(Account).filter_by(user_id=user.id).all():
+    for a in db.query(Account).filter_by(user_id=user.id, perfil_id=perfil.id).all():
         ai = float(db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
             Transaction.cuenta_id == a.id, Transaction.tipo == "ingreso",
             func.to_char(Transaction.fecha, "YYYY-MM") == mes).scalar() or 0)
@@ -40,7 +41,7 @@ def resumen(mes: str, db: Session = Depends(get_db), user: User = Depends(get_cu
 
 
 @router.get("/reportes/evolucion")
-def evolucion(meses: int = 6, hasta: str | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def evolucion(meses: int = 6, hasta: str | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     from datetime import date as _date
 
     meses = max(1, min(meses, 12))
@@ -59,7 +60,7 @@ def evolucion(meses: int = 6, hasta: str | None = None, db: Session = Depends(ge
         func.to_char(Transaction.fecha, "YYYY-MM").label("m"),
         func.coalesce(func.sum(case((Transaction.tipo == "ingreso", Transaction.monto), else_=0)), 0),
         func.coalesce(func.sum(case((Transaction.tipo == "gasto", Transaction.monto), else_=0)), 0),
-    ).filter(Transaction.user_id == user.id).group_by("m").all()
+    ).filter(Transaction.user_id == user.id, Transaction.perfil_id == perfil.id).group_by("m").all()
     por_mes = {r[0]: (float(r[1] or 0), float(r[2] or 0)) for r in agg}
     items = []
     for i in range(meses - 1, -1, -1):
@@ -86,9 +87,9 @@ def evolucion(meses: int = 6, hasta: str | None = None, db: Session = Depends(ge
 
 @router.get("/reportes/distribucion")
 def distribucion(desde: str | None = None, hasta: str | None = None, tipo: str = "gasto",
-                 db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+                 db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     q = db.query(Transaction.categoria_id, func.coalesce(func.sum(Transaction.monto), 0)).filter(
-        Transaction.user_id == user.id, Transaction.tipo == tipo)
+        Transaction.user_id == user.id, Transaction.perfil_id == perfil.id, Transaction.tipo == tipo)
     if desde:
         q = q.filter(Transaction.fecha >= desde)
     if hasta:
@@ -106,7 +107,7 @@ def distribucion(desde: str | None = None, hasta: str | None = None, tipo: str =
 
 @router.get("/simulador")
 def simulador(monto: float, mes: str | None = None, categoria: str | None = None,
-              db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+              db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """¿Puedo permitírmelo? Todo sale de services/finanzas.py, sin recalcular aquí."""
     if monto <= 0:
         raise HTTPException(422, "El monto debe ser mayor a 0")
@@ -115,14 +116,14 @@ def simulador(monto: float, mes: str | None = None, categoria: str | None = None
 
 @router.get("/pronostico")
 def pronostico(meses: int = 6, db: Session = Depends(get_db),
-               user: User = Depends(get_current_user)):
+               user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Balance esperado mes a mes: fijos declarados + promedio de variables."""
     return fin.proyeccion(db, user.id, fin.mes_actual(), max(1, min(meses, 24)))
 
 
 @router.get("/escenarios")
 def escenarios(aporte_mensual: float = 0, meta_id: str | None = None,
-               db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+               db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Qué pasa si: ¿cuándo cumplo mi meta con este aporte?
 
     Sin meta_id devuelve todas las metas con su ruta y cuál priorizar, que es la
@@ -136,7 +137,7 @@ def escenarios(aporte_mensual: float = 0, meta_id: str | None = None,
             raise HTTPException(404, r["error"])
         return r
     metas = []
-    for g in db.query(Goal).filter_by(user_id=user.id).all():
+    for g in db.query(Goal).filter_by(user_id=user.id, perfil_id=perfil.id).all():
         metas.append(fin.ruta_meta(db, user.id, g.id, aporte_mensual))
     alcanzable = fin.meta_mas_alcanzable(db, user.id)
     return {"aporte_mensual": aporte_mensual, "metas": metas,

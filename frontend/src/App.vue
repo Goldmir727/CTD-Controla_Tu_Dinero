@@ -4,6 +4,7 @@
       <Logo :width="44" />
       <strong>CTD</strong>
       <span style="flex: 1"></span>
+      <SelectorPerfil v-if="authed" @cambio="tick++" />
       <button v-if="showHeaderCta" class="btn-new desktop-only" @click="$router.push('/movimientos/nuevo')">+ Nuevo movimiento</button>
       <button v-if="isLanding && !authed" class="btn-ghost" @click="$router.push('/login')">Entrar</button>
       <button v-if="authed" class="gear" @click="$router.push('/config')" aria-label="Ajustes"><i class="bi bi-gear"></i></button>
@@ -44,6 +45,7 @@ import UpdateBanner from './components/UpdateBanner.vue'
 import CookieBanner from './components/CookieBanner.vue'
 import ConsentBanner from './components/ConsentBanner.vue'
 import CapturaRapida from './components/CapturaRapida.vue'
+import SelectorPerfil from './components/SelectorPerfil.vue'
 import Logo from './components/Logo.vue'
 import api from './services/api'
 import { useAuth } from './stores/auth'

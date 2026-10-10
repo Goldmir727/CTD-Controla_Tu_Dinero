@@ -29,12 +29,13 @@ router = APIRouter(tags=["plan"])
 # ---- Presupuestos RC-03 ----
 @router.post("/presupuestos", status_code=201)
 def crear_presupuesto(data: PresupuestoIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    cat = db.query(Category).filter_by(id=data.categoria_id, user_id=user.id).first()
+    cat = db.query(Category).filter_by(id=data.categoria_id, user_id=user.id, perfil_id=perfil.id).first()
     if not cat:
         raise HTTPException(404, "Categoría no encontrada")
     if cat.tipo not in ("gasto", "ambos"):
         raise HTTPException(422, f"La categoría {cat.nombre} es de ingreso: no admite presupuesto")
-    if db.query(Budget).filter_by(user_id=user.id, categoria_id=data.categoria_id, periodo=data.periodo).first():
+    if db.query(Budget).filter_by(user_id=user.id, perfil_id=perfil.id,
+                                                    categoria_id=data.categoria_id, periodo=data.periodo).first():
         raise HTTPException(409, "Ya existe presupuesto para esa categoría y periodo")
     b = Budget(user_id=user.id, perfil_id=perfil.id, **data.model_dump())
     db.add(b)
@@ -45,9 +46,10 @@ def crear_presupuesto(data: PresupuestoIn, db: Session = Depends(get_db), user: 
 @router.get("/presupuestos")
 def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     out = []
-    for b in db.query(Budget).filter_by(user_id=user.id, periodo=periodo).all():
+    for b in db.query(Budget).filter_by(user_id=user.id, perfil_id=perfil.id,
+                          periodo=periodo).all():
         gastado = db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
-            Transaction.user_id == user.id, Transaction.categoria_id == b.categoria_id,
+            Transaction.user_id == user.id, Transaction.perfil_id == perfil.id, Transaction.categoria_id == b.categoria_id,
             Transaction.tipo == "gasto", func.to_char(Transaction.fecha, "YYYY-MM") == periodo,
         ).scalar() or 0
         gastado = float(gastado)
@@ -63,7 +65,7 @@ def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User 
 
 @router.patch("/presupuestos/{pres_id}")
 def actualizar_presupuesto(pres_id: str, data: PresupuestoPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    b = db.query(Budget).filter_by(id=pres_id, user_id=user.id).first()
+    b = db.query(Budget).filter_by(id=pres_id, user_id=user.id, perfil_id=perfil.id).first()
     if not b:
         raise HTTPException(404, "Presupuesto no encontrado")
     b.monto = data.monto
@@ -73,7 +75,7 @@ def actualizar_presupuesto(pres_id: str, data: PresupuestoPatch, db: Session = D
 
 @router.delete("/presupuestos/{pres_id}", status_code=204)
 def eliminar_presupuesto(pres_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    b = db.query(Budget).filter_by(id=pres_id, user_id=user.id).first()
+    b = db.query(Budget).filter_by(id=pres_id, user_id=user.id, perfil_id=perfil.id).first()
     if not b:
         raise HTTPException(404, "Presupuesto no encontrado")
     db.delete(b)
@@ -115,14 +117,15 @@ def crear_meta(data: MetaIn, db: Session = Depends(get_db), user: User = Depends
 
 @router.get("/metas", response_model=list[MetaOut])
 def listar_metas(db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    return [_meta_out(db, g, date.today()) for g in db.query(Goal).filter_by(user_id=user.id).all()]
+    return [_meta_out(db, g, date.today()) for g in
+            db.query(Goal).filter_by(user_id=user.id, perfil_id=perfil.id).all()]
 
 
 @router.post("/metas/{goal_id}/aportes", status_code=201)
 def aportar(goal_id: str, data: AporteIn, db: Session = Depends(get_db), user: User = Depends(get_current_user),
             perfil: Perfil = Depends(get_perfil),
             idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
-    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
+    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id, perfil_id=perfil.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
     if idempotency_key and db.query(GoalAporte).filter_by(user_id=user.id, idempotency_key=idempotency_key).first():
@@ -139,7 +142,7 @@ def aportar(goal_id: str, data: AporteIn, db: Session = Depends(get_db), user: U
 
 @router.get("/metas/{goal_id}/aportes")
 def listar_aportes(goal_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
+    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id, perfil_id=perfil.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
     return [{"id": a.id, "monto": float(a.monto), "fecha": str(a.fecha)}
@@ -158,7 +161,7 @@ def eliminar_aporte(goal_id: str, aporte_id: str, db: Session = Depends(get_db),
 
 @router.patch("/metas/{goal_id}")
 def actualizar_meta(goal_id: str, data: MetaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
+    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id, perfil_id=perfil.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
     patch = data.model_dump(exclude_unset=True)
@@ -175,7 +178,7 @@ def actualizar_meta(goal_id: str, data: MetaPatch, db: Session = Depends(get_db)
 def eliminar_meta(goal_id: str, confirm: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     if not confirm:
         raise HTTPException(422, "Confirma con ?confirm=true")
-    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
+    g = db.query(Goal).filter_by(id=goal_id, user_id=user.id, perfil_id=perfil.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
     db.query(GoalAporte).filter_by(goal_id=goal_id).delete()

@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -29,16 +29,22 @@ def get_current_user(
 
 def get_perfil(
     perfil_id: str | None = Query(default=None, description="Perfil a usar; si se omite, el principal"),
+    x_perfil_id: str | None = Header(default=None, alias="X-Perfil-Id"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Perfil:
     """Resuelve el perfil activo.
 
+    Se puede pedir por query `?perfil_id=` o por header `X-Perfil-Id`. El header es
+    lo que usa el frontend: lo manda un interceptor de axios y no hay que tocar
+    ninguna URL.
+
     Es OBLIGATORIO filtrar por perfil.id en toda lectura y escribir con
     perfil.id en toda insercion: es lo que separa lo Personal de lo Negocio.
     """
-    if perfil_id:
-        p = db.query(Perfil).filter_by(id=perfil_id, user_id=user.id).first()
+    pedido = (x_perfil_id or perfil_id or "").strip() or None
+    if pedido:
+        p = db.query(Perfil).filter_by(id=pedido, user_id=user.id).first()
         if not p:
             raise HTTPException(status_code=404, detail="Perfil no encontrado")
         return p

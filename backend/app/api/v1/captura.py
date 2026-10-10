@@ -96,7 +96,8 @@ def confirmar(data: CapturaConfirmarIn, db: Session = Depends(get_db),
               user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil),
               idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
     """Guarda lo que el usuario acepto. Ahi es donde se escriben movimientos."""
-    reg = db.query(Captura).filter_by(id=data.captura_id, user_id=user.id).first()
+    reg = db.query(Captura).filter_by(id=data.captura_id, user_id=user.id,
+                                        perfil_id=perfil.id).first()
     if not reg:
         raise HTTPException(404, "Captura no encontrada")
     if reg.estado == "guardado":

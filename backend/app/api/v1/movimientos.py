@@ -18,19 +18,15 @@ def _validar(data_tipo: str, data_fecha, cuenta_id: str, categoria_id: str | Non
     # RN-03: fecha válida, no futura más de +1 día
     if data_fecha > date.today() + timedelta(days=1):
         raise HTTPException(422, "La fecha no puede ser futura más de 1 día")
-    acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id).first()
+    acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id, perfil_id=perfil.id).first()
     if not acc:
+        # 404 y no 422 a proposito: si dijéramos "esa cuenta es de otro perfil"
+        # confirmariamos que existe. Es la misma razon por la que no se cruzan perfiles.
         raise HTTPException(404, "Cuenta no encontrada")
-    # La cuenta debe pertenecer al perfil activo: si no, se cruzarian Personal y
-    # Negocio (el bug clasico del independiente).
-    if perfil is not None and acc.perfil_id != perfil.id:
-        raise HTTPException(422, "Esa cuenta pertenece a otro perfil. Cambia de perfil o crea la cuenta acá.")
     if categoria_id:
-        cat = db.query(Category).filter_by(id=categoria_id, user_id=user.id).first()
+        cat = db.query(Category).filter_by(id=categoria_id, user_id=user.id, perfil_id=perfil.id).first()
         if not cat:
             raise HTTPException(404, "Categoría no encontrada")
-        if perfil is not None and cat.perfil_id != perfil.id:
-            raise HTTPException(422, "Esa categoría pertenece a otro perfil")
         if cat.tipo != "ambos" and cat.tipo != data_tipo:
             raise HTTPException(422, f"La categoría {cat.nombre} no admite {data_tipo}")
 
@@ -50,7 +46,8 @@ def crear(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     if idempotency_key:
-        prev = db.query(Transaction).filter_by(user_id=user.id, idempotency_key=idempotency_key).first()
+        prev = db.query(Transaction).filter_by(user_id=user.id, perfil_id=perfil.id,
+                                                 idempotency_key=idempotency_key).first()
         if prev:
             if float(prev.monto) != data.monto or prev.tipo != data.tipo:
                 raise HTTPException(409, "Idempotency-Key ya usada con otro contenido")
@@ -71,12 +68,13 @@ def listar(
     desde: str | None = None,
     hasta: str | None = None,
     q: str | None = None,
-    page: int = 1,
+page: int = 1,
     page_size: int = 20,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+user: User = Depends(get_current_user),
+    perfil: Perfil = Depends(get_perfil),
 ):
-    query = db.query(Transaction).filter_by(user_id=user.id)
+    query = db.query(Transaction).filter_by(user_id=user.id, perfil_id=perfil.id)
     if tipo:
         query = query.filter(Transaction.tipo == tipo)
     if cuenta_id:
@@ -96,7 +94,7 @@ def listar(
 
 @router.get("/movimientos/{mov_id}")
 def obtener(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id).first()
+    m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id, perfil_id=perfil.id).first()
     if not m:
         raise HTTPException(404, "Movimiento no encontrado")
     return _out(m)
@@ -104,7 +102,7 @@ def obtener(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get
 
 @router.patch("/movimientos/{mov_id}")
 def actualizar(mov_id: str, data: MovimientoPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id).first()
+    m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id, perfil_id=perfil.id).first()
     if not m:
         raise HTTPException(404, "Movimiento no encontrado")
     patch = data.model_dump(exclude_unset=True, exclude_none=False)
@@ -124,7 +122,7 @@ def actualizar(mov_id: str, data: MovimientoPatch, db: Session = Depends(get_db)
 
 @router.delete("/movimientos/{mov_id}", status_code=204)
 def eliminar(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id).first()
+    m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id, perfil_id=perfil.id).first()
     if not m:
         raise HTTPException(404, "Movimiento no encontrado")
     db.delete(m)

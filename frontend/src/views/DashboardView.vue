@@ -8,6 +8,30 @@
       <span class="glow-line"></span>
     </section>
 
+    <section v-if="mezcla && mezcla.hay_riesgo" class="card aviso-mezcla">
+      <div class="mezcla-top">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div>
+          <div class="eyebcla">{{ mezcla.perfil }} · POSIBLES MEZCLAS</div>
+          <div style="font-weight: 700; font-size: 15px">
+            Salió {{ dinero(mezcla.total) }} del negocio en gastos personales
+          </div>
+        </div>
+      </div>
+      <ul class="mezcla-lista">
+        <li v-for="h in mezcla.hallazgos" :key="h.categoria + h.cuenta">
+          <span>{{ h.categoria }}</span>
+          <span class="sub">desde {{ h.cuenta }} · {{ h.movimientos }} mov.</span>
+          <strong>{{ dinero(h.total) }}</strong>
+        </li>
+      </ul>
+      <p class="sub">
+        Si esas salidas son del negocio, déjalas aquí. Si son tuyas, muévelas a tu
+        cuenta personal para no ensuciar el balance del negocio.
+      </p>
+      <button class="btn-mint" @click="$router.push('/ajustes')">Revisar perfiles</button>
+    </section>
+
     <section class="card">
       <div class="eyebrow">BALANCE DE {{ mesLabel }}</div>
       <div class="big-number" style="font-size: 32px">{{ balance >= 0 ? '+' : '−' }}${{ fmt(Math.abs(balance)) }}</div>
@@ -43,9 +67,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import api from '../services/api'
-import { numero } from '../utils/formato'
+import { dinero, numero } from '../utils/formato'
 const nombre = ref('')
 const disponible = ref(0)
 const ingresos = ref(0); const gastos = ref(0); const balance = ref(0)
@@ -55,16 +79,53 @@ const mes = new Date().toISOString().slice(0, 7)
 const fmt = (n: number) => numero(n)
 const mesLabel = new Date().toLocaleDateString('es-CO', { month: 'long' }).toUpperCase()
 const saludo = new Date().getHours() < 12 ? 'Buenos días' : new Date().getHours() < 19 ? 'Buenas tardes' : 'Buenas noches'
+
+type Mezcla = {
+  perfil: string
+  hay_riesgo: boolean
+  total: number
+  hallazgos: { categoria: string; cuenta: string; total: number; movimientos: number }[]
+  mensaje: string
+}
+const mezcla = ref<Mezcla | null>(null)
+// Solo tiene sentido avisar si hay un Negocio configurado; si el usuario es
+// personal, el aviso no aparecería nunca y el código sobraría.
+const negocioId = ref<string | null>(null)
+const moneda = ref('COP')
+
 onMounted(async () => {
-  const [me, cuentas, resumen, met] = await Promise.all([
+  const [me, cuentas, resumen, met, perfiles] = await Promise.all([
     api.get('/auth/me').catch(() => null),
     api.get('/cuentas').catch(() => null),
     api.get('/resumen', { params: { mes } }).catch(() => null),
-    api.get('/metas').catch(() => null)
+    api.get('/metas').catch(() => null),
+    api.get('/perfiles').catch(() => null)
   ])
-  if (me) nombre.value = me.data.nombre?.split(' ')[0] ?? ''
+  if (me) {
+    nombre.value = me.data.nombre?.split(' ')[0] ?? ''
+    moneda.value = me.data.moneda ?? 'COP'
+  }
   if (cuentas) disponible.value = cuentas.data.reduce((a: number, c: { saldo_actual: number }) => a + Number(c.saldo_actual), 0)
   if (resumen) { ingresos.value = resumen.data.ingresos; gastos.value = resumen.data.gastos; balance.value = resumen.data.balance_mes; tasa.value = resumen.data.tasa_ahorro }
   if (met) metas.value = [...met.data.filter((m: { faltante: number }) => m.faltante > 0), ...met.data.filter((m: { faltante: number }) => m.faltante <= 0)].slice(0, 2)
+  const negocio = (perfiles?.data?.items ?? []).find((p: { tipo: string }) => p.tipo === 'negocio')
+  negocioId.value = negocio?.id ?? null
+  if (negocio) {
+    const r = await api.get(`/perfiles/${negocio.id}/mezcla`).catch(() => null)
+    if (r) mezcla.value = r.data
+  }
 })
 </script>
+
+<style scoped>
+.aviso-mezcla { border-left: 3px solid var(--warning); background: rgba(216,154,39,.07); }
+.mezcla-top { display: flex; gap: 10px; align-items: flex-start; }
+.mezcla-top i { font-size: 20px; color: var(--warning); margin-top: 2px; }
+.mezcla-top .eyebcla { font-size: 11px; font-weight: 700; color: var(--warning); letter-spacing: .5px; }
+.mezcla-lista { list-style: none; margin: 10px 0; padding: 0; }
+.mezcla-lista li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.mezcla-lista li:last-child { border-bottom: 0; }
+.mezcla-lista li span:first-child { flex: 1; font-weight: 600; }
+.mezcla-lista li strong { font-variant-numeric: tabular-nums; }
+.aviso-mezcla .btn-mint { margin-top: 8px; }
+</style>

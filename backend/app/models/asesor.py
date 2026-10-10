@@ -10,6 +10,9 @@ class AsesorChat(UUIDBase):
     __tablename__ = "asesor_chats"
 
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    # El chat es del perfil, no del usuario: si no, al cambiar de Negocio a Personal
+    # se vería el historial del negocio y el modelo mezclaría ambos contextos.
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfiles.id"), index=True)
     titulo: Mapped[str] = mapped_column(String(120), default="Chat")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

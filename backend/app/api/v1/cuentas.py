@@ -21,7 +21,7 @@ def _saldo(db: Session, acc: Account) -> float:
 
 @router.get("/cuentas", response_model=list[CuentaOut])
 def listar(db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    accs = db.query(Account).filter_by(user_id=user.id).all()
+    accs = db.query(Account).filter_by(user_id=user.id, perfil_id=perfil.id).all()
     return [CuentaOut(id=a.id, nombre=a.nombre, tipo=a.tipo, saldo_inicial=float(a.saldo_inicial), saldo_actual=_saldo(db, a)) for a in accs]
 
 
@@ -36,7 +36,7 @@ def crear(data: CuentaIn, db: Session = Depends(get_db), user: User = Depends(ge
 
 @router.delete("/cuentas/{cuenta_id}", status_code=204)
 def eliminar(cuenta_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id).first()
+    acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id, perfil_id=perfil.id).first()
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
     n = db.query(Transaction).filter_by(cuenta_id=cuenta_id).count()
@@ -49,7 +49,7 @@ def eliminar(cuenta_id: str, db: Session = Depends(get_db), user: User = Depends
 
 @router.patch("/cuentas/{cuenta_id}", response_model=CuentaOut)
 def actualizar(cuenta_id: str, data: CuentaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
-    acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id).first()
+    acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id, perfil_id=perfil.id).first()
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
     patch = data.model_dump(exclude_unset=True)
@@ -67,7 +67,8 @@ def actualizar(cuenta_id: str, data: CuentaPatch, db: Session = Depends(get_db),
 @router.post("/cuentas/dividir", response_model=CuentaOut, status_code=201)
 def dividir(data: CuentaDividirIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Arrepentimiento: crea cuenta restando del total original. Sin cálculos del cliente."""
-    origen = db.query(Account).filter_by(id=data.origen_id, user_id=user.id).first()
+    origen = db.query(Account).filter_by(id=data.origen_id, user_id=user.id,
+                                  perfil_id=perfil.id).first()
     if not origen:
         raise HTTPException(404, "Cuenta origen no encontrada")
     if db.query(Transaction).filter_by(cuenta_id=origen.id).count() > 0:
