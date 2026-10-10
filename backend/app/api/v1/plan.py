@@ -94,7 +94,7 @@ def mensaje_presupuesto(f: dict) -> str:
     faltantes = total - dias
     return (f"Llevas el {f['porcentaje_uso']:.0f}% de {cat} con {dias} de {total} días: "
             f"vas {f['delta_puntos']:.0f} puntos por encima del ritmo. A "
-            f"{f['ritmo_diario']:,.0f} no alcanzas, lo sostenible sería {f['ritmo_sostenible']:,.0f}."
+            f"{dinero(f['ritmo_diario'])} no alcanzas, lo sostenible sería {dinero(f['ritmo_sostenible'])}."
             + (f" Ajusta los últimos {faltantes} días." if faltantes > 0
                else " Ya no queda mes para corregirlo."))
 
@@ -121,6 +121,9 @@ def eliminar_presupuesto(pres_id: str, db: Session = Depends(get_db), user: User
 
 # ---- Metas RC-04/RC-05, RN-09 Opción A ----
 from app.services.imagenes import validar_imagen as _validar_imagen_url
+# El aviso de presupuesto lo lee el usuario en la pantalla: con el formato ingles
+# "1,301,667" lo leeria distinto a como la app muestra los $1.301.667 de al lado.
+from app.services.formato import dinero
 
 MAX_IMAGEN_CHARS = 700_000  # ~500KB en base64
 

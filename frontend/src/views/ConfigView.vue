@@ -140,6 +140,24 @@
 
     <div class="eyebrow">DATOS Y SEGURIDAD</div>
     <button class="item" @click="toggle('respaldo')"><span>Respaldo y exportación</span><span>›</span></button>    <div v-if="open === 'respaldo'" class="panel">
+      <p class="sub" style="margin-bottom: 10px">
+        El Excel es el formato que puedes abrir, revisar y mandar. El JSON es la copia
+        técnica: sirve igual para respaldar, y va en el plan gratis.
+      </p>
+      <div class="row2">
+        <button class="btn-mint" :disabled="busy.excel || !esPro" @click="descargarExcel">
+          <span v-if="busy.excel" class="spinner"></span>Exportar Excel
+        </button>
+        <button class="btn-ghost" :disabled="busy.pdf || !esPro" @click="descargarPdf">
+          <span v-if="busy.pdf" class="spinner"></span>Informe del mes (PDF)
+        </button>
+      </div>
+      <p v-if="!esPro" class="sub candado">
+        <i class="bi bi-lock-fill"></i> Excel e informe en PDF son de PRO. Para respaldar
+        sin plan, usa el JSON de abajo: sale con todo.
+      </p>
+
+      <hr class="divider" />
       <div class="row2">
         <button class="btn-mint" :disabled="busy.respaldo" @click="exportar">
           <span v-if="busy.respaldo" class="spinner"></span>Exportar JSON
@@ -147,8 +165,11 @@
         <select v-model="impModo" class="input"><option value="agregar">Agregar</option><option value="reemplazar">Reemplazar</option></select>
       </div>
       <input type="file" accept=".json" @change="importar" :disabled="busy.respaldo" />
+      <input type="file" accept=".xlsx" @change="importarExcel" :disabled="busy.respaldo" />
       <p v-if="msg.respaldo" class="ok">{{ msg.respaldo }}</p>
       <p v-if="err.respaldo" class="alert">{{ err.respaldo }}</p>
+      <p v-if="msg.excel" class="ok">{{ msg.excel }}</p>
+      <p v-if="err.excel" class="alert">{{ err.excel }}</p>
     </div>
 
     <div class="item" style="cursor: default">
@@ -264,9 +285,12 @@ const div = reactive({ origen: '', nombre: '', monto: null as number | null })
 const ncat = reactive({ nombre: '', tipo: 'gasto' })
 const nmet = ref('')
 const impModo = ref('agregar')
-const busy = reactive({ perfil: false, moneda: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
-const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '' })
-const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', twofa: '', reset: '' })
+const busy = reactive({ perfil: false, moneda: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
+const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '' })
+const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', twofa: '', reset: '' })
+// El boton se deshabilita si no eres PRO, pero el usuario tiene que poder LEER
+// por que esta bloqueado: un boton muerto sin explicacion parece un error.
+const esPro = ref(false)
 const fmt = (n: number) => numero(n)
 const correoMask = computed(() => {
   const [u = '', d = ''] = me.value.correo.split('@')
@@ -285,6 +309,8 @@ async function recargar() {
   ])
   me.value = m.data; cuentas.value = c.data; cats.value = ca.data; metodos.value = me2.data
   twofa.value = e.data.is_2fa_enabled
+  // Se lee capacidades y no solo plan: el backend es quien decide, no el boton.
+  esPro.value = m.data.plan === 'pro' || !!m.data.capacidades?.export_excel
   nombreEdit.value = me.value.nombre; monedaEdit.value = me.value.moneda
 }
 
@@ -400,6 +426,66 @@ async function exportar() {
   } catch { err.respaldo = 'No se pudo exportar.' }
   finally { busy.respaldo = false }
 }
+
+// Descargar un blob del backend. Se usa la misma ruta para el Excel y el PDF:
+// lo unico que cambia es el nombre del archivo, y el nombre debe venir del
+// Content-Disposition del servidor para que el usuario reconozca su propio perfil.
+function _bajar(blob: Blob, nombre: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = nombre; a.click()
+  // Sin revocar, cada descarga deja el blob colgado en memoria del navegador.
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+function _nombreDe(respuesta: { headers: Record<string, unknown> }, porDefecto: string) {
+  const cd = String(respuesta.headers?.['content-disposition'] ?? '')
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(cd)
+  return m ? decodeURIComponent(m[1]) : porDefecto
+}
+async function descargarExcel() {
+  busy.excel = true; err.excel = ''; msg.excel = ''
+  try {
+    const r = await api.get('/documentos/excel', { responseType: 'blob' })
+    _bajar(r.data, _nombreDe(r, 'ctd.xlsx'))
+    msg.excel = 'Excel descargado.'
+  } catch (e: any) {
+    err.excel = e?.response?.status === 402
+      ? 'El Excel es de PRO. Para respaldar gratis, usa el JSON de abajo.'
+      : 'No se pudo generar el Excel.'
+  } finally { busy.excel = false }
+}
+async function descargarPdf() {
+  busy.pdf = true; err.excel = ''; msg.excel = ''
+  try {
+    const r = await api.get('/documentos/reporte.pdf', { responseType: 'blob' })
+    _bajar(r.data, _nombreDe(r, 'informe.pdf'))
+    msg.excel = 'Informe descargado.'
+  } catch (e: any) {
+    err.excel = e?.response?.status === 402
+      ? 'El informe en PDF es de PRO. Activa tu plan para descargarlo.'
+      : 'No se pudo generar el informe.'
+  } finally { busy.pdf = false }
+}
+async function importarExcel(ev: Event) {
+  const f = (ev.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  busy.respaldo = true; err.excel = ''; msg.excel = ''
+  try {
+    const fd = new FormData()
+    fd.append('archivo', f)
+    const { data } = await api.post('/documentos/importar-excel', fd)
+    const detalle = data.errores?.length ? ` Con ${data.errores.length} avisos.` : ''
+    msg.excel = `Entraron ${data.creados}, se omitieron ${data.omitidos_duplicados} repetidos.${detalle}`
+    await recargar()
+  } catch (e: any) {
+    // El backend responde el motivo exacto ("la fecha 'el jueves' no se
+    // entiende"), que es justo lo que el usuario necesita para arreglar el archivo.
+    err.excel = e?.response?.data?.detail ?? 'No se pudo leer el archivo.'
+  } finally {
+    busy.respaldo = false
+    ;(ev.target as HTMLInputElement).value = ''
+  }
+}
 async function importar(ev: Event) {
   const f = (ev.target as HTMLInputElement).files?.[0]
   if (!f) return
@@ -465,4 +551,6 @@ onMounted(async () => { rescatarInstall(); await recargar() })
 .sub{font-size:13px;opacity:.65}
 .btn-logout{margin-top:16px;width:100%;padding:14px;border-radius:14px;background:var(--surface);color:var(--danger);border:1px solid var(--danger);font-weight:800;cursor:pointer}
 .btn-logout:disabled{opacity:.6;cursor:wait}
+.candado{display:flex;gap:6px;align-items:flex-start;margin:0;color:var(--warning);opacity:1;font-size:12.5px;line-height:1.45}
+.candado i{margin-top:2px;flex:none}
 </style>

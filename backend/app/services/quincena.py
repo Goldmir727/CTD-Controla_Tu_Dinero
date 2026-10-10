@@ -24,6 +24,9 @@ from app.models.finance import Budget, Category, Transaction
 from app.models.goals import Recurring
 from app.services import colombia as co
 from app.services import finanzas as fin
+# Los mensajes van al chat y al PDF: si usan el formato ingles ("1,301,667") el
+# usuario lee otra cifra que la de la tabla de al lado ("$1.301.667").
+from app.services.formato import dinero
 
 # Umbral para quejarse: si vas 20 puntos por encima de lo que marca el calendario.
 DELTA_ALERTA = 20
@@ -224,8 +227,8 @@ def _mensaje_presupuesto(nombre: str, pct: float, dia: int, ultimo: int,
                 f"Te pasaste por {pct - 100:.0f} puntos; este mes no te alcanza sin bajar gastos.")
     if delta >= DELTA_ALERTA:
         return (f"Ya gastaste el {pct:.0f}% de {nombre} y apenas vamos el día {dia} de {ultimo}. "
-                f"Vas {delta:.0f} puntos por encima del ritmo; a {ritmo_d:,.0f} "
-                f"no alcanzas, el sostenible sería {sostenible:,.0f}. "
+                f"Vas {delta:.0f} puntos por encima del ritmo; a {dinero(ritmo_d)} "
+                f"no alcanzas, el sostenible sería {dinero(sostenible)}. "
                 + (f"Ajusta lo de los últimos {faltantes} días." if faltantes > 0
                    else "Ya no queda mes para corregirlo."))
     return (f"Llevas el {pct:.0f}% de {nombre} y vas el día {dia} de {ultimo}: "
@@ -241,13 +244,13 @@ def _mensaje(q: dict, movs: dict, cierre: float, alertas: list, libre: float) ->
         partes.append("Todavía no has registrado nada en esta quincena.")
     elif cierre >= 0:
         partes.append(f"Vas con la {etiqueta} y, a este ritmo, "
-                      f"cerrarías con {cierre:,.0f}.")
+                      f"cerrarías con {dinero(cierre)}.")
     else:
-        partes.append(f"Ojo: a este ritmo la {etiqueta} cerraría en {cierre:,.0f}.")
+        partes.append(f"Ojo: a este ritmo la {etiqueta} cerraría en {dinero(cierre)}.")
     if alertas:
         partes.append(f"Tienes {len(alertas)} "
                       + ("presupuesto" if len(alertas) == 1 else "presupuestos")
                       + " yendo más rápido que el calendario.")
     if libre > 0:
-        partes.append(f"Después de los fijos te quedan {libre:,.0f} para tus metas.")
+        partes.append(f"Después de los fijos te quedan {dinero(libre)} para tus metas.")
     return " ".join(partes)

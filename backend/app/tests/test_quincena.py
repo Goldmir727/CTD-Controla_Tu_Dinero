@@ -126,6 +126,24 @@ def test_sin_datos_no_inventa_alertas():
                        0.0, [], 0.0).startswith("Todav")
 
 
+def test_los_mensajes_no_usan_el_formato_ingles():
+    """'1,301,667' y '$1.301.667' son la misma cifra pero se leen distinta.
+
+    El mensaje va al chat y el PDF a la mesa: si uno usa coma de miles y el otro
+    punto, el usuario cree que son dos numeros distintos. Colombia separa miles
+    con punto.
+    """
+    m = qn._mensaje({"etiqueta": "2026-10-Q1"}, {"ingresos": 0, "gastos": 1301667.0},
+                    1301666.67, [], 50000.0)
+    assert "$1.301.667" in m, m
+    assert "1,301" not in m, f"quedo formato ingles: {m}"
+    assert "$50.000" in m, m
+
+    a = qn._mensaje_presupuesto("Ocio", 80, 12, 30, 66666.0, 33333.0, 46.7, False)
+    assert "66.666" in a and "33.333" in a, a
+    assert "66,666" not in a, f"quedo formato ingles: {a}"
+
+
 # ---------- integración: que las alertas se disparen de verdad ----------
 
 @pytest.fixture()

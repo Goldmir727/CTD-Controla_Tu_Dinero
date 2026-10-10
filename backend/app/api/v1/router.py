@@ -6,6 +6,7 @@ from app.api.v1 import (
     captura,
     catalogos,
     cuentas,
+    documentos,
     movimientos,
     perfiles,
     plan,
@@ -17,5 +18,5 @@ from app.api.v1 import (
 api_router = APIRouter()
 for r in (auth.router, perfiles.router, cuentas.router, movimientos.router, plan.router,
           resumen.router, catalogos.router, asesor.router, recurrentes.router,
-          reportes.router, captura.router):
+          reportes.router, captura.router, documentos.router):
     api_router.include_router(r)
