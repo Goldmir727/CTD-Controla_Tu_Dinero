@@ -110,14 +110,19 @@ class UserOut(BaseModel):
 
 def user_out(user) -> UserOut:
     from app.core.plan import config_plan, plan_efectivo
+    from app.core.legal import DATOS_VERSION, TERMINOS_VERSION
     from app.services.formato import simbolo_moneda
 
     cfg = config_plan(user)
+    # La version importa igual que la fecha: si los documentos cambiaron, hay que
+    # volver a pedir el consentimiento aunque el usuario ya lo hubiera dado.
     return UserOut(id=user.id, nombre=user.nombre, correo=user.correo, moneda=user.moneda,
                    foto_url=user.foto_url,
                    onboarding_done=user.onboarding_done, is_2fa_enabled=user.is_2fa_enabled,
-                   acepta_terminos=user.acepta_terminos_at is not None,
-                   acepta_datos=user.acepta_datos_at is not None,
+                   acepta_terminos=(user.acepta_terminos_at is not None
+                                    and user.terminos_version == TERMINOS_VERSION),
+                   acepta_datos=(user.acepta_datos_at is not None
+                                 and user.datos_version == DATOS_VERSION),
                    plan=plan_efectivo(user),
                    simbolo_moneda=simbolo_moneda(user.moneda),
                    capacidades={k: bool(v) for k, v in cfg.items() if isinstance(v, bool)},

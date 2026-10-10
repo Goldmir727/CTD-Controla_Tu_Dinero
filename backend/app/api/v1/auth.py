@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.legal import DATOS_VERSION, TERMINOS_VERSION
 from app.core.deps import get_current_user, get_perfil
 from app.core.ratelimit import login_limit, pw_confirmar_limit, pw_solicitar_limit, solicitar_limit, verificar_limit
 from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
@@ -28,8 +29,7 @@ SEED_METODOS = ["Efectivo", "Tarjeta", "Transferencia",
                 "Nequi", "Daviplata", "Dale", "PSE", "Nómina"]
 
 
-TERMINOS_VERSION = "1.0"
-DATOS_VERSION = "1.0"
+
 
 
 @router.post("/auth/registro", response_model=UserOut, status_code=201)
@@ -199,16 +199,21 @@ def reiniciar_cuenta(confirm: bool = False, db: Session = Depends(get_db),
 
 @router.post("/auth/consentimiento", response_model=UserOut)
 def consentimiento(data: ConsentimientoIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Cuentas creadas antes de la v1.0 legal aceptan aquí (queda trazado)."""
+    """Registra la aceptación de los documentos.
+
+    Se rellena si falta la fecha O si la versión no es la vigente. Solo mirar la
+    fecha hacia que, tras subir de versión, el ConsentBanner apareciera siempre
+    y el usuario no pudiera cerrarlo nunca.
+    """
     from datetime import datetime, timezone
 
     if not data.acepta_terminos or not data.acepta_datos:
         raise HTTPException(status_code=422, detail="Debes aceptar ambos documentos.")
     ahora = datetime.now(timezone.utc).replace(tzinfo=None)
-    if user.acepta_terminos_at is None:
+    if user.acepta_terminos_at is None or user.terminos_version != TERMINOS_VERSION:
         user.acepta_terminos_at = ahora
         user.terminos_version = TERMINOS_VERSION
-    if user.acepta_datos_at is None:
+    if user.acepta_datos_at is None or user.datos_version != DATOS_VERSION:
         user.acepta_datos_at = ahora
         user.datos_version = DATOS_VERSION
     db.commit()
