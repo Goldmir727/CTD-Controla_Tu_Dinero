@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.redisx import get_redis
 from app.models.twofa import TwoFaCode
 from app.services.email import send_2fa_code
 
@@ -28,17 +29,7 @@ _redis = "unset"
 
 
 def _r():
-    global _redis
-    if _redis == "unset":
-        try:
-            import redis
-
-            c = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=2, socket_timeout=2, decode_responses=True)
-            c.ping()
-            _redis = c
-        except Exception:
-            _redis = None
-    return _redis
+    return get_redis()
 
 
 def _keys(user_id: str) -> tuple[str, str, str]:
