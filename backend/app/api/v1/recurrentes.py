@@ -68,7 +68,7 @@ def listar(activo: bool | None = None, db: Session = Depends(get_db),
     q = db.query(Recurring).filter_by(user_id=user.id, perfil_id=perfil.id)
     if activo is not None:
         q = q.filter_by(activo=activo)
-    detalle = {d["id"]: d for d in fin.fijos_mensuales(db, user.id)["detalle"]}
+    detalle = {d["id"]: d for d in fin.fijos_mensuales(db, user.id, perfil.id)["detalle"]}
     cats = {c.id: c.nombre for c in
            db.query(Category).filter_by(user_id=user.id, perfil_id=perfil.id).all()}
     items = []

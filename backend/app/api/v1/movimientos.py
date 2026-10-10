@@ -14,7 +14,11 @@ router = APIRouter(tags=["movimientos"])
 
 
 def _validar(data_tipo: str, data_fecha, cuenta_id: str, categoria_id: str | None,
-             db: Session, user: User, perfil: Perfil | None = None):
+             db: Session, user: User, perfil: Perfil):
+    # perfil es OBLIGATORIO y sin default a proposito: antes era `perfil=None` y
+    # las dos lineas de abajo lo desreferenciaban. PATCH /movimientos no lo
+    # pasaba y daba 500 con cualquier edicion. Un default que el cuerpo no
+    # aguanta es una bomba de reloj, no una comodidad.
     # RN-03: fecha válida, no futura más de +1 día
     if data_fecha > date.today() + timedelta(days=1):
         raise HTTPException(422, "La fecha no puede ser futura más de 1 día")
@@ -112,7 +116,7 @@ def actualizar(mov_id: str, data: MovimientoPatch, db: Session = Depends(get_db)
     _validar(nuevo_tipo, patch.get("fecha", m.fecha),
              patch.get("cuenta_id", m.cuenta_id),
              patch.get("categoria_id", m.categoria_id) if "categoria_id" in patch else m.categoria_id,
-             db, user)
+             db, user, perfil)
     for k, v in patch.items():
         setattr(m, k, v)
     db.commit()
