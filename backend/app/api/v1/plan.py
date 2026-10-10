@@ -45,6 +45,12 @@ def crear_presupuesto(data: PresupuestoIn, db: Session = Depends(get_db), user: 
 
 @router.get("/presupuestos")
 def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
+    from app.services import colombia as co
+
+    hoy = date.today()
+    ultimo = co.dias_del_mes(periodo)
+    # Un mes futuro no tiene dias transcurridos que contar.
+    transcurridos = min(hoy.day, ultimo) if periodo == hoy.strftime("%Y-%m") else 0
     out = []
     for b in db.query(Budget).filter_by(user_id=user.id, perfil_id=perfil.id,
                           periodo=periodo).all():
@@ -56,11 +62,41 @@ def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User 
         monto = float(b.monto)
         pct = presupuesto_porcentaje(monto, gastado)
         cat = db.get(Category, b.categoria_id)
-        out.append({"id": b.id, "categoria_id": b.categoria_id, "categoria": cat.nombre if cat else "",
-                    "monto": monto, "periodo": periodo, "gastado": gastado,
-                    "restante": presupuesto_restante(monto, gastado), "porcentaje_uso": pct,
-                    "estado": presupuesto_estado(pct)})
+        ritmo = round(gastado / transcurridos, 2) if transcurridos else 0.0
+        sostenible = round(monto / ultimo, 2) if ultimo else 0.0
+        esperado = round(sostenible * transcurridos, 2)
+        fila = {"id": b.id, "categoria_id": b.categoria_id, "categoria": cat.nombre if cat else "",
+                "monto": monto, "periodo": periodo, "gastado": gastado,
+                "restante": presupuesto_restante(monto, gastado), "porcentaje_uso": pct,
+                "estado": presupuesto_estado(pct),
+                # Lo que faltaba del contrato §6: sin esto la UI no puede decir
+                # "llevas 80% el día 12", que es el aviso que de verdad ayuda.
+                "ritmo_diario": ritmo, "ritmo_sostenible": sostenible,
+                "dias_transcurridos": transcurridos, "dias_periodo": ultimo,
+                "gastado_esperado": esperado,
+                "delta_puntos": round(pct - (transcurridos / ultimo * 100), 1) if ultimo else 0.0}
+        if restante_ok(fila, restante=presupuesto_restante(monto, gastado)):
+            fila["mensaje"] = mensaje_presupuesto(fila)
+        out.append(fila)
     return out
+
+
+def restante_ok(fila: dict, restante: float) -> bool:
+    return restante < 0 or (fila["delta_puntos"] >= 20 and fila["porcentaje_uso"] >= 80)
+
+
+def mensaje_presupuesto(f: dict) -> str:
+    cat = f["categoria"] or "esa categoría"
+    dias, total = f["dias_transcurridos"], f["dias_periodo"]
+    if f["porcentaje_uso"] > 100:
+        return (f"Te pasaste {f['porcentaje_uso'] - 100:.0f} puntos en {cat} "
+                f"y solo llevas {dias} de {total} días.")
+    faltantes = total - dias
+    return (f"Llevas el {f['porcentaje_uso']:.0f}% de {cat} con {dias} de {total} días: "
+            f"vas {f['delta_puntos']:.0f} puntos por encima del ritmo. A "
+            f"{f['ritmo_diario']:,.0f} no alcanzas, lo sostenible sería {f['ritmo_sostenible']:,.0f}."
+            + (f" Ajusta los últimos {faltantes} días." if faltantes > 0
+               else " Ya no queda mes para corregirlo."))
 
 
 @router.patch("/presupuestos/{pres_id}")

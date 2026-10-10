@@ -131,6 +131,24 @@ HERRAMIENTAS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "revision_quincenal",
+            "description": (
+                "Como va la QUINCENA en curso (1-15 y 16-30, como se cobra en Colombia): "
+                "gastado, fijos que vencen, proyección de cierre y presupuestos que van más "
+                "rápido que el calendario. Úsala cuando pregunten '¿cómo voy?', '¿me alcanza "
+                "este mes?' o '¿cómo voy en esta quincena?'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fecha": {"type": "string", "description": "YYYY-MM-DD. Opcional."}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "riesgo_mezcla",
             "description": (
                 "Revisa si salio plata de las CUENTAS DEL NEGOCIO en gastos personales "
@@ -216,6 +234,19 @@ def ejecutar(nombre: str, args: dict, db: Session, user_id: str, perfil_id: str,
                 return {"error": "Falta el nombre de la categoria."}
             return _redondear(fin._presupuesto_de(db, user_id, perfil_id, args.get("mes") or mes, cat)
                               or {"error": f"No se encontro la categoria '{cat}'."})
+
+        if nombre == "revision_quincenal":
+            from datetime import date as _date
+
+            from app.services.quincena import revision as _revision
+
+            f = None
+            if args.get("fecha"):
+                try:
+                    f = _date.fromisoformat(str(args["fecha"]))
+                except ValueError:
+                    return {"error": "fecha inválida; usa YYYY-MM-DD"}
+            return _redondear(_revision(db, user_id, perfil_id, f))
 
         if nombre == "riesgo_mezcla":
             # Solo tiene sentido si el usuario tiene un Negocio. Sin el, el

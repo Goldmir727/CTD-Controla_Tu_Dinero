@@ -9,6 +9,7 @@ Todo es Colombian a proposito: quincenas (15 y 30), prima (junio/diciembre),
 """
 import re
 import unicodedata
+from calendar import monthrange
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
@@ -275,8 +276,10 @@ def quincena(fecha: date | None = None) -> dict:
         numero, inicio, fin = 1, date(f.year, f.month, 1), date(f.year, f.month, 15)
     else:
         numero, inicio = 2, date(f.year, f.month, 16)
-        ultimo = 31 if f.month in (1, 3, 5, 7, 8, 10, 12) else 30
-        fin = date(f.year, f.month, ultimo)
+        # monthrange y no "31 o 30": febrero tiene 28 (29 en bisiesto) y pedir el
+        # dia 30 de febrero revienta con ValueError. Eso era un 500 desde el 16
+        # hasta el 28 de febrero, todos los años.
+        fin = date(f.year, f.month, monthrange(f.year, f.month)[1])
     total = (fin - inicio).days + 1
     transcurridos = (f - inicio).days + 1 if inicio <= f <= fin else total
     restantes = max(total - transcurridos, 0)
@@ -300,10 +303,9 @@ def etiqueta_quincena(etiqueta: str) -> str:
 
 
 def dias_del_mes(mes: str) -> int:
-    """'2026-10' -> 31"""
+    """'2026-10' -> 31. Un mes de 28 dias no es un mes de 30."""
     try:
         a, m = int(mes[:4]), int(mes[5:7])
-        ultimo = 31 if m in (1, 3, 5, 7, 8, 10, 12) else 30
-        return ultimo
+        return monthrange(a, m)[1]
     except (ValueError, IndexError):
         return 30

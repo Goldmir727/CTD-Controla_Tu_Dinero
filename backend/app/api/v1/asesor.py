@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -13,6 +15,7 @@ from app.models.user import User
 from app.services import asesor as asesor_svc
 
 router = APIRouter(tags=["asesor"])
+
 
 
 class AsesorIn(BaseModel):
@@ -58,9 +61,30 @@ def borrar_chat(chat_id: str, db: Session = Depends(get_db), user: User = Depend
 
 
 @router.get("/asesor/uso")
-def uso_asesor(db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
+def uso_asesor(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+               perfil: Perfil = Depends(get_perfil)):
     """Consumo de hoy, para pintar 'te quedan N' en la UI sin adivinar."""
     return consumo_asesor(db, user)
+
+
+@router.get("/asesor/revision")
+def revision(db: Session = Depends(get_db), user: User = Depends(get_current_user),
+             perfil: Perfil = Depends(get_perfil), fecha: str | None = None):
+    """Como vas en la quincena y que se viene encima.
+
+    Sin push ni cron: se calcula al abrir la app. Por que es suficiente: la
+    quincena dura 15 dias y el usuario abre la app varias veces al dia, asi que la
+    informacion esta lista cuando se necesita, sin infraestructura de recordatorios.
+    """
+    from app.services.quincena import revision as revisar
+
+    f = None
+    if fecha:
+        try:
+            f = date.fromisoformat(fecha)
+        except ValueError:
+            raise HTTPException(422, "fecha debe ser YYYY-MM-DD")
+    return revisar(db, user.id, perfil.id, f)
 
 
 @router.post("/asesor/chat", dependencies=[Depends(asesor_limit)])

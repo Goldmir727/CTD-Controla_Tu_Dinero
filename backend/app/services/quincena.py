@@ -1,0 +1,253 @@
+"""Revision quincenal: como vas en esta quincena y que se viene encima.
+
+Por que la quincena y no el mes: en Colombia casi nadie cobra por mes. La quincena
+(1-15 y 16-30) es la unidad real de la vida financiera, y es cuando seaude "me
+alcanza o no me alcanza". Preguntar por el mes entero llega tarde.
+
+Que responde:
+- Cuanto gastaste en la quincena y cuanto te queda.
+- Que gastos fijos caen en esta quincena (el arriendo del dia 5 es de la primera,
+  el del dia 20 es de la segunda).
+- Si hoy vas a terminar la quincena con plata o en rojo.
+- Que presupuestos van mas rapido que el calendario: ese es el aviso que evita el
+  "ya gastaste el 80% de ocio y apenas vamos el dia 12".
+
+Todo se apoya en services/finanzas.py: la app no puede mostrar dos versiones de
+la misma cifra. Y todo lo predictivo va marcado como estimacion (RN-07).
+"""
+from datetime import date, timedelta
+
+from sqlalchemy import case, func
+from sqlalchemy.orm import Session
+
+from app.models.finance import Budget, Category, Transaction
+from app.models.goals import Recurring
+from app.services import colombia as co
+from app.services import finanzas as fin
+
+# Umbral para quejarse: si vas 20 puntos por encima de lo que marca el calendario.
+DELTA_ALERTA = 20
+
+
+def _ocurrencias_en_quincena(dia: int, frecuencia: str, dia_inicio: int, dia_fin: int) -> int:
+    """Cuantas veces vence un gasto fijo entre dos dias del mes (inclusive).
+
+    Hay que contar sobre el rango real, no suponer "si es mensual, una vez": un
+    arriendo el dia 20 es de la segunda quincena y el del dia 5 de la primera, y
+    si se cuenta mal el fijo no aparece, que es como uno se entera de que le
+    falta plata el dia que ya se la gastó.
+
+    - mensual: vence el dia ``dia``.
+    - quincenal: cada 15 dias a partir de ``dia``.
+    - semanal: cada 7 dias a partir de ``dia``.
+    """
+    paso = {"mensual": 0, "quincenal": 15, "semanal": 7}.get(frecuencia)
+    if paso is None:
+        return 0
+    total = 0
+    for d in range(dia_inicio, dia_fin + 1):
+        if paso == 0:
+            total += 1 if d == dia else 0
+        elif d >= dia and (d - dia) % paso == 0:
+            total += 1
+    return total
+
+
+def fijos_de_la_quincena(db: Session, user_id: str, perfil_id: str, q: dict) -> dict:
+    """Cuanto fijo vence en esta quincena, y el detalle de que es."""
+    dia_inicio = int(q["inicio"][-2:])
+    dia_fin = int(q["fin"][-2:])
+    filas = db.query(Recurring).filter_by(user_id=user_id, perfil_id=perfil_id, activo=True).all()
+    detalle, total = [], 0.0
+    for r in filas:
+        veces = _ocurrencias_en_quincena(r.dia, r.frecuencia, dia_inicio, dia_fin)
+        if veces <= 0:
+            continue
+        monto = round(float(r.monto) * veces, 2)
+        total = round(total + monto, 2)
+        detalle.append({"nombre": r.nombre, "tipo": r.tipo, "monto": monto,
+                         "dia": r.dia, "veces": veces, "frecuencia": r.frecuencia})
+    detalle.sort(key=lambda x: -x["monto"])
+    return {"total": total, "items": detalle,
+            "ingresos": round(sum(x["monto"] for x in detalle if x["tipo"] == "ingreso"), 2),
+            "gastos": round(sum(x["monto"] for x in detalle if x["tipo"] == "gasto"), 2)}
+
+
+def gastado_quincena(db: Session, user_id: str, perfil_id: str, desde: str, hasta: str) -> dict:
+    fila = db.query(
+        func.sum(case((Transaction.tipo == "ingreso", Transaction.monto), else_=0)),
+        func.sum(case((Transaction.tipo == "gasto", Transaction.monto), else_=0)),
+        func.count(Transaction.id),
+    ).filter(Transaction.user_id == user_id, Transaction.perfil_id == perfil_id,
+             Transaction.fecha >= desde, Transaction.fecha <= hasta).first()
+    ing, gas, n = (float(fila[0] or 0), float(fila[1] or 0), int(fila[2] or 0)) if fila else (0.0, 0.0, 0)
+    return {"ingresos": round(ing, 2), "gastos": round(gas, 2),
+            "balance": round(ing - gas, 2), "movimientos": n}
+
+
+def revision(db: Session, user_id: str, perfil_id: str, fecha: date | None = None) -> dict:
+    """Estado de la quincena en curso + proyeccion a su cierre."""
+    hoy = fecha or date.today()
+    q = co.quincena(hoy)
+    desde, hasta = q["inicio"], q["fin"]
+
+    movs = gastado_quincena(db, user_id, perfil_id, desde, hasta)
+    fijos = fijos_de_la_quincena(db, user_id, perfil_id, q)
+    disp = fin.disponible(db, user_id, perfil_id)
+
+    # Proyeccion: lo que ya gasto + lo que falta por gastar a ritmo normal.
+    transcurridos, total_dias = q["dias_transcurridos"], q["dias_totales"]
+    fraccion = transcurridos / total_dias if total_dias else 0
+    variables = fin.promedio_variables(db, user_id, perfil_id, hoy.strftime("%Y-%m"))
+
+    fijos_esperados = round(fijos["total"] * (1 - fraccion), 2)
+    variables_esperados = round(variables["promedio_variables"] * (1 - fraccion), 2)
+    cierre_estimado = round(disp["total"] + movs["balance"] - fijos_esperados - variables_esperados, 2)
+
+    # Comparacion con la misma quincena del mes anterior: es lo unico comparable,
+    # porque un mes puede tener 1 o 2 quincenas dePrimero y Segundo.
+    etiqueta_anterior = _quincena_anterior(q)
+    anterior = _comparar(db, user_id, perfil_id, etiqueta_anterior)
+
+    alertas = alertas_presupuesto(db, user_id, perfil_id, hoy)
+
+    # Cuanto queda libre para la meta, sin prometer nada.
+    libre = round(disp["total"] - fijos["gastos"], 2)
+
+    return {
+        "quincena": q,
+        "etiqueta_legible": co.etiqueta_quincena(q["etiqueta"]),
+        "hoy": hoy.isoformat(),
+        "movimientos": movs,
+        "fijos": fijos,
+        "disponible": disp["total"],
+        "libre_para_metas": max(libre, 0.0),
+        "proyeccion": {
+            "saldo_al_cerrar": cierre_estimado,
+            "fijo_por_pagar": fijos_esperados,
+            "variable_esperada": variables_esperados,
+            "estimacion": True,
+            "nota": "Proyecta lo fijo y tu promedio de variables hasta el cierre. "
+                    "No anticipa ingresos ni gastos extraordinarios.",
+        },
+        "comparacion": anterior,
+        "alertas": alertas,
+        "mensaje": _mensaje(q, movs, cierre_estimado, alertas, libre),
+    }
+
+
+def _quincena_anterior(q: dict) -> dict | None:
+    """La misma quincena (primera o segunda) del mes anterior.
+
+    Ojo aqui: hay que conservar el numero de quincena. Comparar la segunda contra
+    la primera daria siempre "gastaste menos", porque la segunda quincena siempre
+    tiene menos dias y menos movimiento. Seria un numero cierto sobre una
+    comparacion falsa.
+    """
+    f_ini = date.fromisoformat(q["inicio"])
+    ultimo_dia_mes_anterior = f_ini.replace(day=1) - timedelta(days=1)
+    # Mismo numero de quincena: 1 -> dia 1, 2 -> dia 16.
+    dia_equivalente = 1 if q["numero"] == 1 else 16
+    return co.quincena(date(ultimo_dia_mes_anterior.year, ultimo_dia_mes_anterior.month,
+                            dia_equivalente))
+
+
+def _comparar(db: Session, user_id: str, perfil_id: str, etiqueta_anterior: dict | None) -> dict | None:
+    if not etiqueta_anterior:
+        return None
+    previo = gastado_quincena(db, user_id, perfil_id, etiqueta_anterior["inicio"],
+                               etiqueta_anterior["fin"])
+    return {"etiqueta": etiqueta_anterior["etiqueta"],
+            "legible": co.etiqueta_quincena(etiqueta_anterior["etiqueta"]),
+            "gastos": previo["gastos"], "ingresos": previo["ingresos"],
+            "balance": previo["balance"]}
+
+
+def alertas_presupuesto(db: Session, user_id: str, perfil_id: str, hoy: date | None = None) -> list[dict]:
+    """Presupuestos que van mas rapido (o mas lento) que el calendario.
+
+    El aviso que sirve: "Ya gastaste el 80% de Ocio y apenas vamos el dia 12".
+    Comparar solo porcentaje gastado no dice nada; hay que contrastarlo con los
+    dias que llevan.
+    """
+    hoy = hoy or date.today()
+    mes = hoy.strftime("%Y-%m")
+    ultimo = co.dias_del_mes(mes)
+    transcurridos = min(hoy.day, ultimo)
+    fraccion = transcurridos / ultimo
+
+    presupuestos = db.query(Budget).filter_by(user_id=user_id, perfil_id=perfil_id,
+                                            periodo=mes).all()
+    alertas = []
+    for b in presupuestos:
+        gastado = float(db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
+            Transaction.user_id == user_id, Transaction.perfil_id == perfil_id,
+            Transaction.tipo == "gasto", Transaction.categoria_id == b.categoria_id,
+            func.to_char(Transaction.fecha, "YYYY-MM") == mes).scalar() or 0)
+        limite = float(b.monto)
+        if limite <= 0 or gastado <= 0:
+            continue
+        pct_gastado = gastado / limite * 100
+        if pct_gastado < 80:
+            continue
+        delta = pct_gastado - fraccion * 100
+        ritmo_d = gastado / transcurridos if transcurridos else 0
+        estado = "excedido" if pct_gastado > 100 else "muy_rapido"
+        cat = db.get(Category, b.categoria_id)
+        alertas.append({
+            "categoria": cat.nombre if cat else "?",
+            "categoria_id": b.categoria_id,
+            "presupuestado": limite,
+            "gastado": round(gastado, 2),
+            "porcentaje": round(pct_gastado, 1),
+            "dias_transcurridos": transcurridos,
+            "dias_periodo": ultimo,
+            "porcentaje_esperado": round(fraccion * 100, 1),
+            "delta_puntos": round(delta, 1),
+            "ritmo_diario": round(ritmo_d, 2),
+            "ritmo_sostenible": round(limite / ultimo, 2),
+            "estado": estado,
+            "mensaje": _mensaje_presupuesto(cat.nombre if cat else "esa categoría",
+                                           round(pct_gastado, 0), transcurridos, ultimo,
+                                           ritmo_d, limite / ultimo, delta, pct_gastado > 100),
+        })
+    alertas.sort(key=lambda a: -a["delta_puntos"])
+    return alertas
+
+
+def _mensaje_presupuesto(nombre: str, pct: float, dia: int, ultimo: int,
+                         ritmo_d: float, sostenible: float, delta: float,
+                         excedido: bool) -> str:
+    faltantes = ultimo - dia
+    if excedido:
+        return (f"Llevas {pct}% de {nombre} y apenas vas el día {dia} de {ultimo}. "
+                f"Te pasaste por {pct - 100:.0f} puntos; este mes no te alcanza sin bajar gastos.")
+    if delta >= DELTA_ALERTA:
+        return (f"Ya gastaste el {pct:.0f}% de {nombre} y apenas vamos el día {dia} de {ultimo}. "
+                f"Vas {delta:.0f} puntos por encima del ritmo; a {ritmo_d:,.0f} "
+                f"no alcanzas, el sostenible sería {sostenible:,.0f}. "
+                + (f"Ajusta lo de los últimos {faltantes} días." if faltantes > 0
+                   else "Ya no queda mes para corregirlo."))
+    return (f"Llevas el {pct:.0f}% de {nombre} y vas el día {dia} de {ultimo}: "
+            f"un poco más rápido de lo normal.")
+
+
+def _mensaje(q: dict, movs: dict, cierre: float, alertas: list, libre: float) -> str:
+    # "la primera quincena": etiqueta_quincena devuelve sin artículo porque también
+    # se usa suelta en la UI, y "Vas con primera quincena" suena a frase rota.
+    etiqueta = co.etiqueta_quincena(q["etiqueta"])
+    partes = []
+    if movs["gastos"] == 0 and movs["ingresos"] == 0:
+        partes.append("Todavía no has registrado nada en esta quincena.")
+    elif cierre >= 0:
+        partes.append(f"Vas con la {etiqueta} y, a este ritmo, "
+                      f"cerrarías con {cierre:,.0f}.")
+    else:
+        partes.append(f"Ojo: a este ritmo la {etiqueta} cerraría en {cierre:,.0f}.")
+    if alertas:
+        partes.append(f"Tienes {len(alertas)} "
+                      + ("presupuesto" if len(alertas) == 1 else "presupuestos")
+                      + " yendo más rápido que el calendario.")
+    if libre > 0:
+        partes.append(f"Después de los fijos te quedan {libre:,.0f} para tus metas.")
+    return " ".join(partes)
