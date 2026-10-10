@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     # (OpenAI gpt-4o-mini rechaza el parámetro).
     asesor_reasoning_effort: str = "low"
     asesor_max_dia: int = 20
+    # Captura en lenguaje natural. Es un camino distinto al chat: el usuario escribe
+    # o habla una frase y la app propone movimientos.
+    captura_max_dia: int = 40
+    # Cuando esta en false, el usuario SIEMPRE tiene que tocar "Guardar" antes de
+    # que se escriba algo. Con true, lo que este seguro se guarda de una.
+    captura_confirmar_siempre: bool = True
+    # Nota de voz. Whisper de Groq con la misma clave que el asesor.
+    # El audio NO se guarda en ningun lado: se transcribe y se descarta.
+    voz_model: str = "whisper-large-v3-turbo"
+    voz_max_segundos: int = 30
+    voz_max_bytes: int = 8_000_000
 
     @field_validator("cors_origins", mode="before")
     @classmethod

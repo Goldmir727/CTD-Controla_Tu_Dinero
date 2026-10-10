@@ -123,13 +123,20 @@ def invalidar_cache() -> None:
 
 
 def buscar_modismos(texto: str, db: Session) -> list[dict]:
-    """Modismos presentes en el texto. Se buscan primero los mas largos para que
-    'recibo de la luz' gane sobre 'luz'."""
+    """Modismos presentes en el texto.
+
+    Busca primero los mas largos para que 'recibo de la luz' gane sobre 'luz', y
+    exige limites de palabra: sin ellos "gasté" matcheaba el modismo "gas" (Servicios)
+    porque es subcadena.
+    """
     mods = cargar_modismos(db)
     t = normalizar(texto)
     hallados: list[dict] = []
     for termino in sorted(mods, key=len, reverse=True):
-        if termino in t:
+        # \b no sirve con acentos/ñ; se arma el patron sobre el termino ya normalizado
+        # (sin tildes) y se buscan espacios/limites reales alrededor.
+        patron = r"(?<![a-z0-9])" + re.escape(termino) + r"(?![a-z0-9])"
+        if re.search(patron, t):
             for cand in mods[termino]:
                 hallados.append({"termino": termino, **cand})
     return hallados

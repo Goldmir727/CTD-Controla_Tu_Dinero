@@ -27,5 +27,9 @@ solicitar_limit = _limit("2fa-sol", 10, 600)
 verificar_limit = _limit("2fa-ver", 10, 60)
 pw_solicitar_limit = _limit("pw-sol", 5, 600)
 pw_confirmar_limit = _limit("pw-ver", 10, 60)
-# Asesor IA: tope diario por IP (el tope por usuario/plan llega con el paywall)
-asesor_limit = _limit("asesor", 20, 86400)
+# Asesor IA: tope diario por IP. El tope real por usuario y plan vive en
+# core/plan.py (asesor_dia) y este queda como red de seguridad por IP.
+asesor_limit = _limit("asesor", 40, 86400)
+# Captura en lenguaje natural: una llamada por frase, asi que el tope por IP es
+# holgado. El que manda es la cuota por usuario (captura_dia).
+captura_limit = _limit("captura", 60, 86400)

@@ -8,7 +8,8 @@
       <button v-if="isLanding && !authed" class="btn-ghost" @click="$router.push('/login')">Entrar</button>
       <button v-if="authed" class="gear" @click="$router.push('/config')" aria-label="Ajustes"><i class="bi bi-gear"></i></button>
     </header>
-    <router-view />
+    <router-view :key="tick" />
+    <CapturaRapida @guardado="refrescarTrasCaptura" />
     <InstallPrompt />
     <UpdateBanner />
     <CookieBanner />
@@ -42,11 +43,20 @@ import InstallPrompt from './components/InstallPrompt.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
 import CookieBanner from './components/CookieBanner.vue'
 import ConsentBanner from './components/ConsentBanner.vue'
+import CapturaRapida from './components/CapturaRapida.vue'
 import Logo from './components/Logo.vue'
 import api from './services/api'
 import { useAuth } from './stores/auth'
 import { useTema } from './composables/useTema'
 const route = useRoute()
+
+// Tras una captura hay que recargar la vista actual. Cambiar la key del router-view
+// remonta el componente y sus onMounted vuelven a pedir datos: es mas fiable que
+// un evento global al que cada vista tenga que suscribirse.
+const tick = ref(0)
+function refrescarTrasCaptura(n: number) {
+  if (n > 0) tick.value += 1
+}
 const router = useRouter()
 const auth = useAuth()
 const fan = ref(false)
