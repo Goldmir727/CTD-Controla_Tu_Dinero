@@ -9,8 +9,8 @@ from datetime import date, datetime
 import pytest
 
 from app.core.database import SessionLocal
-from app.models.finance import Account, Budget, Category, Transaction
-from app.models.goals import Recurring
+from app.models.finance import Account, Budget, Category, PaymentMethod, Transaction
+from app.models.goals import Goal, GoalAporte, Recurring
 from app.models.perfil import Perfil
 from app.models.user import User
 from app.services import finanzas as fin
@@ -40,10 +40,14 @@ def escenario():
                       descripcion="gasté 200 en un dulce")
     db.add(mov); db.commit(); db.refresh(mov)
     yield db, u, p, otro, cat, cta, cta_negocio, mov
-    for model in (Transaction, Budget, Recurring):
+    # El orden importa por las FK: los hijos se borran antes que los padres, o
+    # el teardown revienta y el error tapa el fallo real del test.
+    metas = [g.id for g in db.query(Goal).filter_by(user_id=u.id).all()]
+    if metas:
+        db.query(GoalAporte).filter(GoalAporte.goal_id.in_(metas)).delete(
+            synchronize_session=False)
+    for model in (Transaction, Budget, Recurring, Goal, PaymentMethod, Category, Account):
         db.query(model).filter_by(user_id=u.id).delete()
-    db.query(Category).filter_by(user_id=u.id).delete()
-    db.query(Account).filter_by(user_id=u.id).delete()
     db.query(Perfil).filter_by(user_id=u.id).delete()
     db.delete(u); db.commit(); db.close()
 
@@ -251,3 +255,66 @@ def test_el_endpoint_de_fijos_crea_editar_pausa_y_borra(escenario):
 
     borrar(nuevo["id"], db=db, user=u, perfil=p)
     assert listar(db=db, user=u, perfil=p)["items"] == []
+
+
+# ---------- Regresiones que ya estaban rotas ----------
+
+def test_crear_un_perfil_no_duplica_los_metodos_de_pago(escenario):
+    """Los metodos de pago son por USUARIO, no por perfil.
+
+    Sembrarlos sin mirar los existentes los duplicaba en cada perfil nuevo: la
+    base llego a 4 copias de cada uno y /metodos-pago devolvia 24 filas para 8
+    metodos. El usuario lo veia en todos los selectores de metodo de pago.
+    """
+    from collections import Counter
+
+    from app.api.v1.auth import _sembrar_perfil
+    from app.models.finance import PaymentMethod
+
+    db, u, p, otro, cat, cta, cta_neg, mov = escenario
+    assert db.query(PaymentMethod).filter_by(user_id=u.id).count() == 0, "el fixture no siembra metodos"
+
+    # Sembrar dos perfiles seguidos, que es lo que pasa en la vida real.
+    for destino in (p, otro):
+        _sembrar_perfil(db, u.id, destino.id)
+        db.commit()
+
+    total = db.query(PaymentMethod).filter_by(user_id=u.id).count()
+    assert total == 8, f"dos perfiles debian sembrar 8 metodos en total, hay {total}"
+    c = Counter(m.nombre for m in db.query(PaymentMethod).filter_by(user_id=u.id).all())
+    assert not [k for k, v in c.items() if v > 1], f"quedaron metodos repetidos: {c}"
+
+
+def test_sembrar_de_nuevo_sobre_un_perfil_con_datos_no_revienta(escenario):
+    """La siembra tiene que poder correr dos veces sobre el mismo perfil.
+
+    Antes reventaba el UNIQUE de categorias (perfil_id, nombre, tipo) en cuanto
+    el perfil ya tenia una con ese nombre.
+    """
+    from app.api.v1.auth import _sembrar_perfil
+    from app.models.finance import Category
+
+    db, u, p, otro, cat, cta, cta_neg, mov = escenario
+    # El fixture ya tiene "Comida" en el perfil p.
+    _sembrar_perfil(db, u.id, p.id)
+    db.commit()
+    comidas = db.query(Category).filter_by(user_id=u.id, perfil_id=p.id,
+                                           nombre="Comida", tipo="gasto").count()
+    assert comidas == 1, f"quedaron {comidas} categorias Comida"
+    cuentas = db.query(Account).filter_by(user_id=u.id, perfil_id=p.id).count()
+    assert cuentas >= 1, "no debe duplicar la cuenta Efectivo"
+
+
+def test_una_meta_de_otro_perfil_no_se_lee(escenario):
+    """ruta_meta solo miraba user_id: la meta del Negocio se leia desde el Personal."""
+    from app.models.goals import Goal
+    from app.services import finanzas as f
+
+    db, u, p, otro, cat, cta, cta_neg, mov = escenario
+    meta_negocio = Goal(user_id=u.id, perfil_id=otro.id, nombre="Camion",
+                        objetivo=30000000, fecha_objetivo=date(2027, 6, 1))
+    db.add(meta_negocio); db.commit(); db.refresh(meta_negocio)
+
+    r = f.ruta_meta(db, u.id, meta_negocio.id, 500000, date.today(), p.id)
+    assert r.get("error") == "Meta no encontrada", \
+        f"una meta del Negocio se respondio desde el perfil Personal: {r}"

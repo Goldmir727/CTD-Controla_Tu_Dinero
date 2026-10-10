@@ -239,10 +239,20 @@ def proyeccion(db: Session, user_id: str, perfil_id: str, desde_mes: str | None 
 
 
 def ruta_meta(db: Session, user_id: str, meta_id: str, aporte_mensual: float,
-              hoy: date | None = None) -> dict:
-    """En cuantos meses cumples una meta con un aporte mensual, partiendo de lo ahorrado."""
+              hoy: date | None = None, perfil_id: str | None = None) -> dict:
+    """En cuantos meses cumples una meta con un aporte mensual, partiendo de lo ahorrado.
+
+    `perfil_id` es opcional SOLO para no romper los llamadores viejos, pero
+    cuando se pasa, filtra. Antes solo miraba user_id: una meta del Negocio se
+    podia leer estando en el perfil Personal. No es fuga entre usuarios (el
+    user_id siempre se comprueba) pero si es fuga entre perfiles, que es
+    justo lo que el modulo de perfiles existe para evitar.
+    """
     hoy = hoy or date.today()
-    meta = db.query(Goal).filter_by(id=meta_id, user_id=user_id).first()
+    q = db.query(Goal).filter_by(id=meta_id, user_id=user_id)
+    if perfil_id:
+        q = q.filter_by(perfil_id=perfil_id)
+    meta = q.first()
     if not meta:
         return {"error": "Meta no encontrada"}
     ahorrado = float(db.query(func.coalesce(func.sum(GoalAporte.monto), 0))

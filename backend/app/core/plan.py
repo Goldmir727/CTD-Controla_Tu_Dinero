@@ -5,7 +5,12 @@ listo para que el checkout futuro solo lo actualice, sin cambiar endpoints.
 
 Decisiones de producto:
 - El asesor CON herramientas (function calling) es gratis pero limitado: es el anzuelo.
-  Lo de pago son los reportes detallados y los documentos (Excel/PDF).
+  Lo de pago son los reportes detallados y el informe en PDF.
+- El Excel es GRATIS a proposito, aunque antes estuviera en PRO. Cobrar la copia
+  de los datos propios no es un negocio: el usuario la esquivaba por el JSON
+  (que se abre en Bloc de Notas), asi que el candado no protegia nada y solo
+  producia decepciones. El JSON tampoco se puede cobrar por el mismo motivo.
+  Lo que si justifica pagar es el PDF: un documento armado para entregar.
 - Si Redis no responde, la cuota diaria del asesor cae a contar filas en Postgres
   (asesor_mensajes) en vez de dejarlo sin limite.
 """
@@ -25,7 +30,7 @@ PLANES: dict[str, dict] = {
         "asesor_dia": 5,
         "captura_dia": 15,
         "reportes_detallados": False,
-        "export_excel": False,
+        "export_excel": True,
         "export_pdf": False,
         "fijos": True,
     },

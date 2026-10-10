@@ -33,6 +33,7 @@ from app.models.perfil import Perfil
 from app.models.user import User
 from app.services import captura as cap
 from app.services import colombia as co
+from app.services import deteccion as det
 
 router = APIRouter(tags=["captura"])
 
@@ -52,6 +53,16 @@ class MovimientoAConfirmar(BaseModel):
     cuenta_id: str | None = None
     fecha: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     fijo: bool = False
+    # Que fijo YA DECLARADO es este movimiento. Lo llena el usuario cuando la app
+    # pregunta "¿es el mismo Arriendo o uno distinto?". Si viene None y el
+    # movimiento se parece a un fijo existente, se guarda sin enlazar: el
+    # movimiento es real de todos modos, lo unico que se pierde es la linea que
+    # lo ataba al plan. Perder el enlace es mucho mejor que bloquear el gasto.
+    recurrente_id: str | None = None
+    # Crear ademas un fijo NUEVO con este movimiento. Para cuando el usuario
+    # responde "es distinto": no es el Arriendo de siempre sino, digamos, un
+    # arriendo en otro apartamento o el celular que renueva cada mes.
+    nuevo_fijo: bool = False
 
 
 class CapturaConfirmarIn(BaseModel):
@@ -85,6 +96,16 @@ def capturar(data: CapturaIn, db: Session = Depends(get_db),
     reg = _bitacora(db, user, perfil, data, "propuesta", propuesta["movimientos"], 0,
                     propuesta["requiere_confirmacion_monto"])
     db.commit()
+
+    # Por cada movimiento, que fijos declarados PODRIAN ser. La UI pregunta
+    # "¿es este el Arriendo que ya tienes o uno distinto?" en vez de decidir
+    # sola: el usuario sabe, la app no.
+    for m in propuesta["movimientos"]:
+        fecha = _validar_fecha(m["fecha"])
+        m["coincidencias"] = det.detectar(
+            db, user.id, perfil.id, m.get("descripcion") or "", m["tipo"], m["monto"],
+            fecha.day)
+        m.pop("categoria", None)   # la UI lo resuelve por id; no weighs la cadena
 
     # Lo que la UI necesita mostrar y permitir editar.
     return {**propuesta, "captura_id": reg.id, "cuota": cuota,
@@ -142,10 +163,35 @@ def confirmar(data: CapturaConfirmarIn, db: Session = Depends(get_db),
             creados.append({"id": mov.id, "tipo": mov.tipo, "monto": float(mov.monto),
                             "categoria": cat.nombre, "fecha": mov.fecha.isoformat()})
 
-            # Si el usuario marco el gasto como fijo, se propone el recurrente.
-            if m.fijo and m.tipo == "gasto" and not db.query(Recurring).filter_by(
-                    perfil_id=perfil.id, cuenta_id=cuenta.id, categoria_id=cat.id,
-                    activo=True).first():
+            # Que fijo ya declarado es este movimiento (el usuario dijo "si, es este").
+            # Se valida que sea del perfil: sin esto, mandar un recurrente_id de otro
+            # perfil escribiria un enlace cruzado, que es justo lo que este modulo evita.
+            rec = None
+            if m.recurrente_id:
+                rec = db.query(Recurring).filter_by(id=m.recurrente_id,
+                                                     perfil_id=perfil.id).first()
+            if rec:
+                mov.recurrente_id = rec.id
+                rec.confirmado = True
+            elif m.recurrente_id:
+                errores.append({"indice": i,
+                                "detalle": "Ese fijo no es de este perfil; se guardo sin enlace"})
+
+            # "Es distinto": se crea un fijo NUEVO con este movimiento, para que el
+            # motor lo cuente aparte del que ya existe.
+            if m.nuevo_fijo and m.tipo == "gasto":
+                nombre_fijo = (m.descripcion or cat.nombre)[:120]
+                ya = db.query(Recurring).filter_by(perfil_id=perfil.id, nombre=nombre_fijo,
+                                                    dia=fecha.day, activo=True).first()
+                if not ya:
+                    db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
+                                     nombre=nombre_fijo, tipo="gasto", monto=m.monto,
+                                     dia=fecha.day, frecuencia="mensual",
+                                     cuenta_id=cuenta.id, categoria_id=cat.id, activo=True,
+                                     confirmado=True, nota="Creado desde la captura"))
+            elif m.fijo and m.tipo == "gasto" and not rec and not db.query(
+                    Recurring).filter_by(perfil_id=perfil.id, cuenta_id=cuenta.id,
+                                       categoria_id=cat.id, activo=True).first():
                 db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
                                  nombre=m.descripcion or cat.nombre, tipo="gasto",
                                  monto=m.monto, dia=fecha.day, frecuencia="mensual",

@@ -53,6 +53,12 @@ class Transaction(UUIDBase):
     monto: Mapped[float] = mapped_column(Numeric(14, 2))
     fecha: Mapped[date] = mapped_column(Date, index=True)
     descripcion: Mapped[str] = mapped_column(Text, default="")
+    # Que fijo declarado es este movimiento (si es que es alguno). Nullable y sin
+    # FK a proposito: la migracion 0015 tampoco la crea porque el Postgres de
+    # Aiven (PgBouncer) no resuelve la referencia en esa sentencia DDL. La
+    # integridad la pone el codigo, que filtra por user_id + perfil_id en todas
+    # partes y valida el recurrente_id contra el perfil al enlazar.
+    recurrente_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -211,8 +211,8 @@ def ejecutar(nombre: str, args: dict, db: Session, user_id: str, perfil_id: str,
                     return {"error": f"No hay una meta que se llame '{meta_nombre}'.",
                             "metas_disponibles": disponibles}
             if objetivo is not None:
-                return _redondear(fin.ruta_meta(db, user_id, objetivo.id, aporte, date.today()))
-            metas = [fin.ruta_meta(db, user_id, g.id, aporte, date.today())
+                return _redondear(fin.ruta_meta(db, user_id, objetivo.id, aporte, date.today(), perfil_id))
+            metas = [fin.ruta_meta(db, user_id, g.id, aporte, date.today(), perfil_id)
                      for g in db.query(Goal).filter_by(user_id=user_id, perfil_id=perfil_id).all()]
             if not metas:
                 return {"error": "El usuario todavia no tiene metas de ahorro registradas."}

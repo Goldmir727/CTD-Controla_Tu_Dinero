@@ -61,12 +61,30 @@ def registro(data: RegistroIn, db: Session = Depends(get_db)):
 
 
 def _sembrar_perfil(db: Session, user_id: str, perfil_id: str) -> None:
-    """Crea las filas base de un perfil: una cuenta, las categorias y los metodos."""
-    db.add(Account(user_id=user_id, perfil_id=perfil_id, nombre="Efectivo",
-                   tipo="efectivo", saldo_inicial=0))
+    """Siembra un perfil. Es IDEMPOTENTE: se puede volver a correr sin romper nada.
+
+    Eso no es un detalle, es el contrato. Antes insertaba a ciegas y:
+      - los metodos de pago se duplicaban en cada perfil nuevo (son por USUARIO,
+        no por perfil, y no hay UNIQUE que lo impida): /metodos-pago devolvia 24
+        filas para 8 metodos y el usuario lo veia en todos los selectores.
+      - las categorias reventaban el UNIQUE (perfil_id, nombre, tipo) si el
+        perfil ya tenia una con ese nombre.
+    """
+    if not db.query(Account).filter_by(user_id=user_id, perfil_id=perfil_id).first():
+        db.add(Account(user_id=user_id, perfil_id=perfil_id, nombre="Efectivo",
+                       tipo="efectivo", saldo_inicial=0))
     for nombre, tipo in SEED_CATS:
+        ya = db.query(Category).filter_by(user_id=user_id, perfil_id=perfil_id,
+                                          nombre=nombre, tipo=tipo).first()
+        if ya:
+            continue
         db.add(Category(user_id=user_id, perfil_id=perfil_id, nombre=nombre, tipo=tipo))
+    # Los metodos de pago son POR USUARIO, no por perfil (la tabla no tiene
+    # perfil_id), asi que se comparten entre Personal y Negocio y no se siembran
+    # de nuevo si ya existen.
     for nombre in SEED_METODOS:
+        if db.query(PaymentMethod).filter_by(user_id=user_id, nombre=nombre).first():
+            continue
         db.add(PaymentMethod(user_id=user_id, nombre=nombre))
 
 

@@ -141,11 +141,11 @@
     <div class="eyebrow">DATOS Y SEGURIDAD</div>
     <button class="item" @click="toggle('respaldo')"><span>Respaldo y exportación</span><span>›</span></button>    <div v-if="open === 'respaldo'" class="panel">
       <p class="sub" style="margin-bottom: 10px">
-        El Excel es el formato que puedes abrir, revisar y mandar. El JSON es la copia
-        técnica: sirve igual para respaldar, y va en el plan gratis.
+        Tus datos son tuyos: el Excel y el JSON salen sin plan. El informe en PDF es
+        el único de PRO, porque viene armado para enseñárselo a alguien.
       </p>
       <div class="row2">
-        <button class="btn-mint" :disabled="busy.excel || !esPro" @click="descargarExcel">
+        <button class="btn-mint" :disabled="busy.excel" @click="descargarExcel">
           <span v-if="busy.excel" class="spinner"></span>Exportar Excel
         </button>
         <button class="btn-ghost" :disabled="busy.pdf || !esPro" @click="descargarPdf">
@@ -153,8 +153,8 @@
         </button>
       </div>
       <p v-if="!esPro" class="sub candado">
-        <i class="bi bi-lock-fill"></i> Excel e informe en PDF son de PRO. Para respaldar
-        sin plan, usa el JSON de abajo: sale con todo.
+        <i class="bi bi-lock-fill"></i> El informe en PDF es de PRO. Para respaldar o
+        revisar tus datos, el Excel de arriba y el JSON de abajo salen gratis.
       </p>
 
       <hr class="divider" />

@@ -13,6 +13,16 @@ import api from '../services/api'
 import { dinero, numero } from '../utils/formato'
 import { useAuth } from '../stores/auth'
 
+type Coincidencia = {
+  id: string
+  nombre: string
+  tipo: 'gasto' | 'ingreso'
+  monto: number
+  dia: number
+  frecuencia: string
+  confianza: number
+  motivo: string
+}
 type Mov = {
   ix: number
   tipo: 'gasto' | 'ingreso'
@@ -27,6 +37,10 @@ type Mov = {
   metodo: string | null
   fecha: string
   fijo: boolean
+  /** Fijos declarados que PODRIAN ser este movimiento. La UI pregunta. */
+  coincidencias?: Coincidencia[]
+  /** Que eligio el usuario: un id de fijo, 'nuevo' o null (nada). */
+  eleccion?: string | null
 }
 type Propuesta = {
   captura_id: string
@@ -230,7 +244,12 @@ async function confirmar() {
         metodo_id: m.metodo_id,
         cuenta_id: propuesta.value?.cuenta_por_defecto,
         fecha: m.fecha,
-        fijo: m.fijo
+        fijo: m.fijo,
+        // "Sí, es el mismo" -> el id del fijo; "No, es otro" -> crear uno nuevo.
+        // Sin respuesta no se manda nada y el gasto se guarda igual: perder el
+        // enlace con el plan es mejor que frenar el registro del gasto.
+        recurrente_id: m.eleccion && m.eleccion !== 'nuevo' ? m.eleccion : null,
+        nuevo_fijo: m.eleccion === 'nuevo'
       }))
     })
     if (data.errores?.length) {
@@ -340,6 +359,35 @@ async function confirmar() {
               ? 'No dijiste el monto. Escríbelo a mano.'
               : 'Ese monto no estaba en tu texto: la IA lo dedujo. Confírmalo.' }}
           </p>
+
+          <!--
+            El usuario ya declaró este fijo en /plan y ahora captura algo que se le
+            parece. La app NO decide: pregunta. Si ella eligiera sola se equivocaria
+            en los dos sentidos (crear dos arriendos, o tomar el de siempre como
+            si fuera otro) y el usuario perdería la confianza en el aviso.
+          -->
+          <div v-if="m.coincidencias?.length" class="coincide">
+            <p class="coincide-preg">
+              <i class="bi bi-arrow-repeat"></i>
+              ¿Este es tu <strong>{{ m.coincidencias[0].nombre }}</strong> de siempre
+              ({{ dinero(m.coincidencias[0].monto) }}, día {{ m.coincidencias[0].dia }})?
+              <span class="sub">{{ m.coincidencias[0].motivo }}</span>
+            </p>
+            <div class="coincide-botones">
+              <button :class="['chip', m.eleccion === m.coincidencias[0].id ? 'on' : '']"
+                @click="m.eleccion = m.eleccion === m.coincidencias[0].id ? null : m.coincidencias[0].id">
+                Sí, es el mismo
+              </button>
+              <button :class="['chip', m.eleccion === 'nuevo' ? 'on' : '']"
+                @click="m.eleccion = m.eleccion === 'nuevo' ? null : 'nuevo'">
+                No, es otro
+              </button>
+              <button v-if="m.eleccion" class="link" @click="m.eleccion = null">Quitar</button>
+            </div>
+            <p v-if="m.eleccion === 'nuevo'" class="sub">
+              Se creará un fijo nuevo con este movimiento, aparte de los que ya tienes.
+            </p>
+          </div>
         </div>
 
         <div v-if="propuesta.avisos.length" class="avisos">
@@ -438,4 +486,10 @@ async function confirmar() {
 .avisos { margin-top: 10px; font-size: 12px; color: var(--ink-soft); }
 .avisos p { margin: 4px 0; }
 .total { text-align: right; margin-top: 12px; }
+  .coincide { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--mint-soft); }
+  .coincide-preg { margin: 0; font-size: 13px; line-height: 1.45; }
+  .coincide-preg i { color: var(--mint-dark); margin-right: 4px; }
+  .coincide-preg .sub { display: block; margin: 4px 0 0; font-size: 11.5px; }
+  .coincide-botones { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .coincide .chip { padding: 6px 12px; font-size: 12.5px; }
 </style>

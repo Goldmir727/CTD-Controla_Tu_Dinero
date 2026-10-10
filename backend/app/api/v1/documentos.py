@@ -1,12 +1,13 @@
 """Excel canonico y PDF: como el usuario saca sus datos y se lleva un documento.
 
-Excel es el formato canonico porque es el que la gente usa de verdad (y el que un
-contador pide). El JSON de /respaldo sigue vivo como version interna del backup
-automatico, pero este es el que el usuario abre.
+Excel es el formato que la gente usa de verdad (y el que un contador pide), asi
+que es GRATIS. Cobrarlo no era un negocio: el JSON de /respaldo entrega lo mismo
+y se abre en Bloc de Notas, asi que el candado era evitable por cualquiera y
+solo decia "te cobramos por tus datos".
 
-El PDF va con candado de PRO: es el entregable que el usuariopaid quiere, y a
-hijo le "imprimir" le da igual. El Excel no: el respaldo es de todos, es
-precisamente la garantia de que no perdera sus datos si la app desapareciera.
+El PDF si es de PRO, y por una razon concreta: no es una copia de los datos sino
+un documento armado (resumen, quincena, alertas, desglose) pensado para
+ensenarselo a otro. Eso si es un producto.
 """
 from __future__ import annotations
 
@@ -30,15 +31,11 @@ router = APIRouter(tags=["documentos"])
 def excel(
     perfil_id: str | None = Query(default=None, description="Si se omite, sale todo"),
     db=Depends(get_db), user: User = Depends(get_current_user),
-    _pro: User = Depends(require_plan(
-        "export_excel", "El Excel es una función PRO. Si solo quieres respaldar, "
-                        "el JSON de Ajustes es gratis y trae lo mismo.")),
 ):
     """Descarga el respaldo en Excel, con las hojas que el usuario puede leer.
 
-    Excel es PRO porque es el entregable. Quien solo quiera sacar sus datos puede
-    usar /respaldo/export (JSON), que sigue gratis: cobrar la copia de seguridad
-    seria dejar al usuario encerrado en la app.
+    Sin candado y sin cuota: esto es el respaldo del usuario. Si el proposito de
+    cobro fuera cobrar la informacion, seria para cobrar la app entera.
     """
     try:
         contenido = docs.exportar_excel(db, user, [perfil_id] if perfil_id else None)
