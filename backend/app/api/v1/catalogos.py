@@ -4,7 +4,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_perfil
+from app.models.perfil import Perfil
 from app.models.finance import Account, Budget, Category, PaymentMethod, Transaction
 from app.models.goals import Goal, GoalAporte
 from app.models.user import User
@@ -16,7 +17,7 @@ router = APIRouter(tags=["catalogos"])
 # ---- Categorías RN-04 ----
 @router.get("/categorias")
 def listar_cats(tipo: str | None = None, solo_activas: bool = True,
-                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+                db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     q = db.query(Category).filter_by(user_id=user.id)
     if tipo:
         q = q.filter(Category.tipo == tipo)
@@ -26,17 +27,17 @@ def listar_cats(tipo: str | None = None, solo_activas: bool = True,
 
 
 @router.post("/categorias", status_code=201)
-def crear_cat(data: CategoriaIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def crear_cat(data: CategoriaIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     if db.query(Category).filter_by(user_id=user.id, nombre=data.nombre, tipo=data.tipo).first():
         raise HTTPException(409, "Ya existe esa categoría")
-    c = Category(user_id=user.id, **data.model_dump())
+    c = Category(user_id=user.id, perfil_id=perfil.id, **data.model_dump())
     db.add(c)
     db.commit()
     return {"id": c.id}
 
 
 @router.patch("/categorias/{cat_id}")
-def patch_cat(cat_id: str, data: CategoriaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def patch_cat(cat_id: str, data: CategoriaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     c = db.query(Category).filter_by(id=cat_id, user_id=user.id).first()
     if not c:
         raise HTTPException(404, "Categoría no encontrada")
@@ -47,7 +48,7 @@ def patch_cat(cat_id: str, data: CategoriaPatch, db: Session = Depends(get_db), 
 
 
 @router.delete("/categorias/{cat_id}", status_code=204)
-def del_cat(cat_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def del_cat(cat_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     c = db.query(Category).filter_by(id=cat_id, user_id=user.id).first()
     if not c:
         raise HTTPException(404, "Categoría no encontrada")
@@ -60,12 +61,12 @@ def del_cat(cat_id: str, db: Session = Depends(get_db), user: User = Depends(get
 
 # ---- Métodos de pago ----
 @router.get("/metodos-pago")
-def listar_metodos(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def listar_metodos(db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     return [{"id": m.id, "nombre": m.nombre} for m in db.query(PaymentMethod).filter_by(user_id=user.id).all()]
 
 
 @router.post("/metodos-pago", status_code=201)
-def crear_metodo(nombre: str = Body(..., embed=True), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def crear_metodo(nombre: str = Body(..., embed=True), db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     if db.query(PaymentMethod).filter_by(user_id=user.id, nombre=nombre).first():
         raise HTTPException(409, "Ya existe ese método")
     m = PaymentMethod(user_id=user.id, nombre=nombre)
@@ -75,7 +76,7 @@ def crear_metodo(nombre: str = Body(..., embed=True), db: Session = Depends(get_
 
 
 @router.delete("/metodos-pago/{metodo_id}", status_code=204)
-def del_metodo(metodo_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def del_metodo(metodo_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     m = db.query(PaymentMethod).filter_by(id=metodo_id, user_id=user.id).first()
     if not m:
         raise HTTPException(404, "Método no encontrado")
@@ -88,7 +89,7 @@ def del_metodo(metodo_id: str, db: Session = Depends(get_db), user: User = Depen
 
 # ---- Respaldo MVP-10 ----
 @router.get("/respaldo/export")
-def export(formato: str = "json", db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def export(formato: str = "json", db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     if formato not in ("json", "csv"):
         raise HTTPException(422, "formato debe ser json|csv")
     data = {
@@ -121,7 +122,7 @@ def export(formato: str = "json", db: Session = Depends(get_db), user: User = De
 
 @router.post("/respaldo/import")
 def import_data(payload: dict = Body(...), modo: str = Query(default="agregar", pattern="^(reemplazar|agregar)$"),
-                db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+                db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     if payload.get("version") != 1:
         raise HTTPException(422, "version debe ser 1")
     creados, omitidos, errores = 0, 0, []
@@ -132,7 +133,7 @@ def import_data(payload: dict = Body(...), modo: str = Query(default="agregar", 
     # Mapas id viejo -> nuevo para cuentas/categorías/métodos
     mapa_cuentas, mapa_cats, mapa_met = {}, {}, {}
     for a in payload.get("cuentas", []):
-        na = Account(user_id=user.id, nombre=a["nombre"], tipo=a.get("tipo", "otro"), saldo_inicial=a.get("saldo_inicial", 0))
+        na = Account(user_id=user.id, perfil_id=perfil.id, nombre=a["nombre"], tipo=a.get("tipo", "otro"), saldo_inicial=a.get("saldo_inicial", 0))
         db.add(na)
         db.flush()
         if a.get("id"):
@@ -142,7 +143,7 @@ def import_data(payload: dict = Body(...), modo: str = Query(default="agregar", 
         if db.query(Category).filter_by(user_id=user.id, nombre=c["nombre"], tipo=c.get("tipo", "gasto")).first():
             omitidos += 1
             continue
-        nc = Category(user_id=user.id, nombre=c["nombre"], tipo=c.get("tipo", "gasto"),
+        nc = Category(user_id=user.id, perfil_id=perfil.id, nombre=c["nombre"], tipo=c.get("tipo", "gasto"),
                       icono=c.get("icono", "tag"), activa=c.get("activa", True))
         db.add(nc)
         db.flush()
@@ -171,7 +172,7 @@ def import_data(payload: dict = Body(...), modo: str = Query(default="agregar", 
                 if not primera:
                     raise ValueError("sin cuentas para importar")
                 cid = primera.id
-            db.add(Transaction(user_id=user.id, tipo=t["tipo"], monto=t["monto"], fecha=t["fecha"],
+            db.add(Transaction(user_id=user.id, perfil_id=perfil.id, tipo=t["tipo"], monto=t["monto"], fecha=t["fecha"],
                                descripcion=t.get("descripcion", ""),
                                cuenta_id=cid,
                                categoria_id=mapa_cats.get(t.get("categoria_id"), t.get("categoria_id")),
@@ -189,14 +190,14 @@ def import_data(payload: dict = Body(...), modo: str = Query(default="agregar", 
             if db.query(Budget).filter_by(user_id=user.id, categoria_id=cid, periodo=b["periodo"]).first():
                 omitidos += 1
                 continue
-            db.add(Budget(user_id=user.id, categoria_id=cid, monto=b["monto"], periodo=b["periodo"]))
+            db.add(Budget(user_id=user.id, perfil_id=perfil.id, categoria_id=cid, monto=b["monto"], periodo=b["periodo"]))
             creados += 1
         except Exception as e:
             errores.append(str(e))
     # Metas + aportes (Opción A: solo seguimiento, no tocan saldos)
     for g in payload.get("metas", []):
         try:
-            ng = Goal(user_id=user.id, nombre=g["nombre"], objetivo=g["objetivo"],
+            ng = Goal(user_id=user.id, perfil_id=perfil.id, nombre=g["nombre"], objetivo=g["objetivo"],
                       fecha_objetivo=date.fromisoformat(g["fecha_objetivo"]) if g.get("fecha_objetivo") else None,
                       imagen_url=g.get("imagen_url"))
             db.add(ng)

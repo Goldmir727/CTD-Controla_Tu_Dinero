@@ -5,7 +5,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_perfil
+from app.models.perfil import Perfil
 from app.models.finance import Budget, Category, Transaction
 from app.models.goals import Goal, GoalAporte
 from app.models.user import User
@@ -27,7 +28,7 @@ router = APIRouter(tags=["plan"])
 
 # ---- Presupuestos RC-03 ----
 @router.post("/presupuestos", status_code=201)
-def crear_presupuesto(data: PresupuestoIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def crear_presupuesto(data: PresupuestoIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     cat = db.query(Category).filter_by(id=data.categoria_id, user_id=user.id).first()
     if not cat:
         raise HTTPException(404, "Categoría no encontrada")
@@ -35,14 +36,14 @@ def crear_presupuesto(data: PresupuestoIn, db: Session = Depends(get_db), user: 
         raise HTTPException(422, f"La categoría {cat.nombre} es de ingreso: no admite presupuesto")
     if db.query(Budget).filter_by(user_id=user.id, categoria_id=data.categoria_id, periodo=data.periodo).first():
         raise HTTPException(409, "Ya existe presupuesto para esa categoría y periodo")
-    b = Budget(user_id=user.id, **data.model_dump())
+    b = Budget(user_id=user.id, perfil_id=perfil.id, **data.model_dump())
     db.add(b)
     db.commit()
     return {"id": b.id}
 
 
 @router.get("/presupuestos")
-def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     out = []
     for b in db.query(Budget).filter_by(user_id=user.id, periodo=periodo).all():
         gastado = db.query(func.coalesce(func.sum(Transaction.monto), 0)).filter(
@@ -61,7 +62,7 @@ def listar_presupuestos(periodo: str, db: Session = Depends(get_db), user: User 
 
 
 @router.patch("/presupuestos/{pres_id}")
-def actualizar_presupuesto(pres_id: str, data: PresupuestoPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def actualizar_presupuesto(pres_id: str, data: PresupuestoPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     b = db.query(Budget).filter_by(id=pres_id, user_id=user.id).first()
     if not b:
         raise HTTPException(404, "Presupuesto no encontrado")
@@ -71,7 +72,7 @@ def actualizar_presupuesto(pres_id: str, data: PresupuestoPatch, db: Session = D
 
 
 @router.delete("/presupuestos/{pres_id}", status_code=204)
-def eliminar_presupuesto(pres_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def eliminar_presupuesto(pres_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     b = db.query(Budget).filter_by(id=pres_id, user_id=user.id).first()
     if not b:
         raise HTTPException(404, "Presupuesto no encontrado")
@@ -81,19 +82,13 @@ def eliminar_presupuesto(pres_id: str, db: Session = Depends(get_db), user: User
 
 
 # ---- Metas RC-04/RC-05, RN-09 Opción A ----
+from app.services.imagenes import validar_imagen as _validar_imagen_url
+
 MAX_IMAGEN_CHARS = 700_000  # ~500KB en base64
 
 
 def _validar_imagen(imagen_url: str | None) -> None:
-    if imagen_url is None:
-        return
-    if imagen_url == "":
-        return
-    ok_prefix = imagen_url.startswith(("data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,"))
-    if not ok_prefix and not imagen_url.startswith(("http://", "https://")):
-        raise HTTPException(422, "Imagen inválida: usa JPG/PNG/WebP o una URL http(s)")
-    if len(imagen_url) > MAX_IMAGEN_CHARS:
-        raise HTTPException(422, "Imagen muy pesada (máx ~500KB)")
+    _validar_imagen_url(imagen_url, MAX_IMAGEN_CHARS)
 
 
 def _meta_out(db: Session, g: Goal, hoy: date) -> MetaOut:
@@ -110,27 +105,30 @@ def _meta_out(db: Session, g: Goal, hoy: date) -> MetaOut:
 
 
 @router.post("/metas", status_code=201)
-def crear_meta(data: MetaIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def crear_meta(data: MetaIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     _validar_imagen(data.imagen_url)
-    g = Goal(user_id=user.id, **data.model_dump())
+    g = Goal(user_id=user.id, perfil_id=perfil.id, **data.model_dump())
     db.add(g)
     db.commit()
     return {"id": g.id}
 
 
 @router.get("/metas", response_model=list[MetaOut])
-def listar_metas(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def listar_metas(db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     return [_meta_out(db, g, date.today()) for g in db.query(Goal).filter_by(user_id=user.id).all()]
 
 
 @router.post("/metas/{goal_id}/aportes", status_code=201)
 def aportar(goal_id: str, data: AporteIn, db: Session = Depends(get_db), user: User = Depends(get_current_user),
+            perfil: Perfil = Depends(get_perfil),
             idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
     g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
     if idempotency_key and db.query(GoalAporte).filter_by(user_id=user.id, idempotency_key=idempotency_key).first():
         raise HTTPException(409, "Aporte duplicado (Idempotency-Key)")
+    # GoalAporte no lleva perfil_id: hereda el de la meta, asi que un aporte nunca
+    # puede quedar en un perfil distinto al de su meta.
     ap = GoalAporte(goal_id=goal_id, user_id=user.id, monto=data.monto,
                     fecha=data.fecha or date.today(), idempotency_key=idempotency_key)
     db.add(ap)
@@ -140,7 +138,7 @@ def aportar(goal_id: str, data: AporteIn, db: Session = Depends(get_db), user: U
 
 
 @router.get("/metas/{goal_id}/aportes")
-def listar_aportes(goal_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def listar_aportes(goal_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
@@ -149,7 +147,7 @@ def listar_aportes(goal_id: str, db: Session = Depends(get_db), user: User = Dep
 
 
 @router.delete("/metas/{goal_id}/aportes/{aporte_id}", status_code=204)
-def eliminar_aporte(goal_id: str, aporte_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def eliminar_aporte(goal_id: str, aporte_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     a = db.query(GoalAporte).filter_by(id=aporte_id, goal_id=goal_id, user_id=user.id).first()
     if not a:
         raise HTTPException(404, "Aporte no encontrado")
@@ -159,7 +157,7 @@ def eliminar_aporte(goal_id: str, aporte_id: str, db: Session = Depends(get_db),
 
 
 @router.patch("/metas/{goal_id}")
-def actualizar_meta(goal_id: str, data: MetaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def actualizar_meta(goal_id: str, data: MetaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()
     if not g:
         raise HTTPException(404, "Meta no encontrada")
@@ -174,7 +172,7 @@ def actualizar_meta(goal_id: str, data: MetaPatch, db: Session = Depends(get_db)
 
 
 @router.delete("/metas/{goal_id}", status_code=204)
-def eliminar_meta(goal_id: str, confirm: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def eliminar_meta(goal_id: str, confirm: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     if not confirm:
         raise HTTPException(422, "Confirma con ?confirm=true")
     g = db.query(Goal).filter_by(id=goal_id, user_id=user.id).first()

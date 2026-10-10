@@ -11,6 +11,7 @@ class Account(UUIDBase):
     __tablename__ = "accounts"
 
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfiles.id"), index=True)
     nombre: Mapped[str] = mapped_column(String(120))
     tipo: Mapped[str] = mapped_column(String(20), default="efectivo")  # efectivo|banco|bolsa|otro
     saldo_inicial: Mapped[float] = mapped_column(Numeric(14, 2), default=0)
@@ -18,9 +19,12 @@ class Account(UUIDBase):
 
 class Category(UUIDBase):
     __tablename__ = "categories"
-    __table_args__ = (UniqueConstraint("user_id", "nombre", "tipo", name="uq_cat_user_nombre_tipo"),)
+    # El UNIQUE cuelga del perfil, no del usuario: con Personal + Negocio cada uno
+    # necesita su propia "Comida".
+    __table_args__ = (UniqueConstraint("perfil_id", "nombre", "tipo", name="uq_cat_perfil_nombre_tipo"),)
 
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfiles.id"), index=True)
     nombre: Mapped[str] = mapped_column(String(120))
     tipo: Mapped[str] = mapped_column(String(10), default="gasto")  # ingreso|gasto|ambos
     icono: Mapped[str] = mapped_column(String(60), default="tag")
@@ -28,6 +32,9 @@ class Category(UUIDBase):
 
 
 class PaymentMethod(UUIDBase):
+    """Sin perfil_id a proposito: una billetera Nequi es la misma en lo personal
+    y en el negocio, y duplicarla solo confunde al usuario."""
+
     __tablename__ = "payment_methods"
 
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
@@ -38,6 +45,7 @@ class Transaction(UUIDBase):
     __tablename__ = "transactions"
 
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfiles.id"), index=True)
     cuenta_id: Mapped[str] = mapped_column(String(36), ForeignKey("accounts.id"))
     categoria_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("categories.id"), nullable=True)
     metodo_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("payment_methods.id"), nullable=True)
@@ -51,9 +59,10 @@ class Transaction(UUIDBase):
 
 class Budget(UUIDBase):
     __tablename__ = "budgets"
-    __table_args__ = (UniqueConstraint("user_id", "categoria_id", "periodo", name="uq_budget_user_cat_periodo"),)
+    __table_args__ = (UniqueConstraint("perfil_id", "categoria_id", "periodo", name="uq_budget_perfil_cat_periodo"),)
 
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfiles.id"), index=True)
     categoria_id: Mapped[str] = mapped_column(String(36), ForeignKey("categories.id"))
     monto: Mapped[float] = mapped_column(Numeric(14, 2))
     periodo: Mapped[str] = mapped_column(String(7))  # YYYY-MM

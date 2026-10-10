@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_perfil
+from app.models.perfil import Perfil
 from app.models.finance import Account, Category, Transaction
 from app.models.user import User
 from app.schemas.finance import MovimientoIn, MovimientoPatch
@@ -12,17 +13,24 @@ from app.schemas.finance import MovimientoIn, MovimientoPatch
 router = APIRouter(tags=["movimientos"])
 
 
-def _validar(data_tipo: str, data_fecha, cuenta_id: str, categoria_id: str | None, db: Session, user: User):
+def _validar(data_tipo: str, data_fecha, cuenta_id: str, categoria_id: str | None,
+             db: Session, user: User, perfil: Perfil | None = None):
     # RN-03: fecha válida, no futura más de +1 día
     if data_fecha > date.today() + timedelta(days=1):
         raise HTTPException(422, "La fecha no puede ser futura más de 1 día")
     acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id).first()
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
+    # La cuenta debe pertenecer al perfil activo: si no, se cruzarian Personal y
+    # Negocio (el bug clasico del independiente).
+    if perfil is not None and acc.perfil_id != perfil.id:
+        raise HTTPException(422, "Esa cuenta pertenece a otro perfil. Cambia de perfil o crea la cuenta acá.")
     if categoria_id:
         cat = db.query(Category).filter_by(id=categoria_id, user_id=user.id).first()
         if not cat:
             raise HTTPException(404, "Categoría no encontrada")
+        if perfil is not None and cat.perfil_id != perfil.id:
+            raise HTTPException(422, "Esa categoría pertenece a otro perfil")
         if cat.tipo != "ambos" and cat.tipo != data_tipo:
             raise HTTPException(422, f"La categoría {cat.nombre} no admite {data_tipo}")
 
@@ -38,6 +46,7 @@ def crear(
     data: MovimientoIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    perfil: Perfil = Depends(get_perfil),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     if idempotency_key:
@@ -46,8 +55,8 @@ def crear(
             if float(prev.monto) != data.monto or prev.tipo != data.tipo:
                 raise HTTPException(409, "Idempotency-Key ya usada con otro contenido")
             return {**_out(prev), "reutilizado": True}
-    _validar(data.tipo, data.fecha, data.cuenta_id, data.categoria_id, db, user)
-    mov = Transaction(user_id=user.id, idempotency_key=idempotency_key, **data.model_dump())
+    _validar(data.tipo, data.fecha, data.cuenta_id, data.categoria_id, db, user, perfil)
+    mov = Transaction(user_id=user.id, perfil_id=perfil.id, idempotency_key=idempotency_key, **data.model_dump())
     db.add(mov)
     db.commit()
     db.refresh(mov)
@@ -86,7 +95,7 @@ def listar(
 
 
 @router.get("/movimientos/{mov_id}")
-def obtener(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def obtener(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id).first()
     if not m:
         raise HTTPException(404, "Movimiento no encontrado")
@@ -94,7 +103,7 @@ def obtener(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get
 
 
 @router.patch("/movimientos/{mov_id}")
-def actualizar(mov_id: str, data: MovimientoPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def actualizar(mov_id: str, data: MovimientoPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id).first()
     if not m:
         raise HTTPException(404, "Movimiento no encontrado")
@@ -114,7 +123,7 @@ def actualizar(mov_id: str, data: MovimientoPatch, db: Session = Depends(get_db)
 
 
 @router.delete("/movimientos/{mov_id}", status_code=204)
-def eliminar(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def eliminar(mov_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     m = db.query(Transaction).filter_by(id=mov_id, user_id=user.id).first()
     if not m:
         raise HTTPException(404, "Movimiento no encontrado")

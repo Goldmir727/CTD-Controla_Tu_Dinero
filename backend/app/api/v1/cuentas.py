@@ -3,7 +3,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_perfil
+from app.models.perfil import Perfil
 from app.models.finance import Account, Transaction
 from app.models.user import User
 from app.schemas.finance import CuentaDividirIn, CuentaIn, CuentaOut, CuentaPatch
@@ -19,14 +20,14 @@ def _saldo(db: Session, acc: Account) -> float:
 
 
 @router.get("/cuentas", response_model=list[CuentaOut])
-def listar(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def listar(db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     accs = db.query(Account).filter_by(user_id=user.id).all()
     return [CuentaOut(id=a.id, nombre=a.nombre, tipo=a.tipo, saldo_inicial=float(a.saldo_inicial), saldo_actual=_saldo(db, a)) for a in accs]
 
 
 @router.post("/cuentas", response_model=CuentaOut, status_code=201)
-def crear(data: CuentaIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    acc = Account(user_id=user.id, **data.model_dump())
+def crear(data: CuentaIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
+    acc = Account(user_id=user.id, perfil_id=perfil.id, **data.model_dump())
     db.add(acc)
     db.commit()
     db.refresh(acc)
@@ -34,7 +35,7 @@ def crear(data: CuentaIn, db: Session = Depends(get_db), user: User = Depends(ge
 
 
 @router.delete("/cuentas/{cuenta_id}", status_code=204)
-def eliminar(cuenta_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def eliminar(cuenta_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id).first()
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
@@ -47,7 +48,7 @@ def eliminar(cuenta_id: str, db: Session = Depends(get_db), user: User = Depends
 
 
 @router.patch("/cuentas/{cuenta_id}", response_model=CuentaOut)
-def actualizar(cuenta_id: str, data: CuentaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def actualizar(cuenta_id: str, data: CuentaPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     acc = db.query(Account).filter_by(id=cuenta_id, user_id=user.id).first()
     if not acc:
         raise HTTPException(404, "Cuenta no encontrada")
@@ -64,7 +65,7 @@ def actualizar(cuenta_id: str, data: CuentaPatch, db: Session = Depends(get_db),
 
 
 @router.post("/cuentas/dividir", response_model=CuentaOut, status_code=201)
-def dividir(data: CuentaDividirIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def dividir(data: CuentaDividirIn, db: Session = Depends(get_db), user: User = Depends(get_current_user), perfil: Perfil = Depends(get_perfil)):
     """Arrepentimiento: crea cuenta restando del total original. Sin cálculos del cliente."""
     origen = db.query(Account).filter_by(id=data.origen_id, user_id=user.id).first()
     if not origen:
@@ -74,7 +75,7 @@ def dividir(data: CuentaDividirIn, db: Session = Depends(get_db), user: User = D
     if float(origen.saldo_inicial) < data.monto:
         raise HTTPException(422, "El monto supera el disponible de la cuenta origen")
     origen.saldo_inicial = float(origen.saldo_inicial) - data.monto
-    nueva = Account(user_id=user.id, nombre=data.nombre, tipo=data.tipo, saldo_inicial=data.monto)
+    nueva = Account(user_id=user.id, perfil_id=perfil.id, nombre=data.nombre, tipo=data.tipo, saldo_inicial=data.monto)
     db.add(nueva)
     db.commit()
     db.refresh(nueva)
