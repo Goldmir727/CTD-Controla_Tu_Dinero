@@ -1,7 +1,17 @@
 from typing import Annotated
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, NoDecode
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# Valores que aparecen en .env.example o como default. Firmar con cualquiera de
+# ellos es tan inseguro como no tener autenticacion.
+_SECRETS_POR_DEFECTO = {
+    "dev_secret_cambiar_en_prod",
+    "cambia_este_secreto_en_produccion_min32chars",
+    "cambia_este_secreto_en_produccion",
+    "changeme",
+    "secret",
+}
 
 
 class Settings(BaseSettings):
@@ -20,6 +30,21 @@ class Settings(BaseSettings):
     twofa_max_attempts: int = 5
     twofa_cooldown_s: int = 60
     redis_url: str = "redis://localhost:6379/0"
+    # Asesor IA (plan separado, OpenAI). Sin clave → 503 explicativo.
+    openai_api_key: str = ""
+    asesor_model: str = "gpt-4o-mini"
+    # Compatible OpenAI: Groq (gratis) u Ollama local. Ejemplos:
+    # Groq:  ASESOR_BASE_URL=https://api.groq.com/openai/v1  ASESOR_MODEL=openai/gpt-oss-20b
+    # Ollama: ASESOR_BASE_URL=http://host.docker.internal:11434/v1  ASESOR_MODEL=llama3.1
+    asesor_base_url: str = "https://api.openai.com/v1"
+    # OJO: los modelos de razonamiento (gpt-oss, o1/o3) gastan tokens pensando ANTES
+    # de responder. Con un tope bajo se quedan sin presupuesto y devuelven texto vacío,
+    # así que el mínimo realista es ~2000.
+    asesor_max_tokens: int = 2000
+    # low|medium|high para modelos que lo soportan (gpt-oss en Groq). Vacío = no enviar
+    # (OpenAI gpt-4o-mini rechaza el parámetro).
+    asesor_reasoning_effort: str = "low"
+    asesor_max_dia: int = 20
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -40,8 +65,40 @@ class Settings(BaseSettings):
             return [p.strip() for p in s.split(",") if p.strip()]
         return v
 
-    class Config:
-        env_file = ".env"
+    @model_validator(mode="after")
+    def _jwt_secret_usable(self):
+        """Convierte "acordate de cambiar el secreto" en un error imposible de ignorar.
+
+        Con un JWT_SECRET débil o conocido, cualquiera puede firmar tokens con
+        cualquier user_id y entrar como ese usuario. Antes esto fallaba en silencio.
+        """
+        s = (self.jwt_secret or "").strip()
+        if not s:
+            # Dev: genera uno efimero. Reiniciar invalida los tokens, sin ruido.
+            import logging
+            import secrets
+
+            logging.getLogger(__name__).warning(
+                "JWT_SECRET no configurado: se genera uno aleatorio para esta ejecucion. "
+                "Los tokens no sobreviviran un reinicio. Define JWT_SECRET en .env para produccion."
+            )
+            object.__setattr__(self, "jwt_secret", secrets.token_urlsafe(48))
+            return self
+        if s.lower() in _SECRETS_POR_DEFECTO:
+            raise ValueError(
+                "JWT_SECRET sigue siendo el valor de ejemplo de .env.example. "
+                "Cualquiera que lo conozca puede firmar tokens de administrador. "
+                "Genera uno real con: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        if len(s) < 32:
+            raise ValueError(
+                f"JWT_SECRET tiene {len(s)} caracteres; minimo 32. "
+                "Genera uno con: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        return self
+
+    # pydantic-settings v2: `class Config` esta deprecado, se usa model_config.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

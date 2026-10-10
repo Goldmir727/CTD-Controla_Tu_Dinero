@@ -1,0 +1,20 @@
+# Sin esto, en Windows git convierte a CRLF y los scripts de shell dejan de
+# ejecutarse en Linux: "exec format error" al arrancar el contenedor.
+* text=auto eol=lf
+
+# Los .bat y .cmd SI necesitan CRLF.
+*.bat text eol=crlf
+*.cmd  text eol=crlf
+
+# Binarios: nunca tocar.
+*.png  binary
+*.ico  binary
+*.jpg  binary
+*.jpeg binary
+*.woff binary
+*.woff2 binary
+*.pdf  binary
+*.xlsx binary
+
+# Los .bat y .cmd del frontend keeps.
+frontend/package-lock.json -diff
