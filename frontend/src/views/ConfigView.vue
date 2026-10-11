@@ -58,10 +58,18 @@
       <button :class="['chip', tema === 'light' ? 'on' : '']" @click="setTema('light')">Claro</button>
       <button :class="['chip', tema === 'dark' ? 'on' : '']" @click="setTema('dark')">Oscuro</button>
     </div>
-    <button class="item" @click="toggle('moneda')"><span>Moneda</span><span>{{ me.moneda }} ›</span></button>
+    <button class="item" @click="toggle('moneda')"><span>País y moneda<small>{{ paisNombre }} · {{ me.moneda }}</small></span><span>›</span></button>
     <div v-if="open === 'moneda'" class="panel row2">
-      <button v-for="m in ['COP', 'USD', 'MXN', 'EUR']" :key="m" :class="['chip', monedaEdit === m ? 'on' : '']" @click="monedaEdit = m">{{ m }}</button>
-      <button class="btn-mint" :disabled="busy.moneda" @click="guardarMoneda">
+      <p class="sub" style="margin: 0; flex-basis: 100%">
+        El país define el formato de los números y si la app razona en quincenas.
+      </p>
+      <button
+        v-for="p in catalogoPaises"
+        :key="p.codigo"
+        :class="['chip', paisEdit === p.codigo ? 'on' : '']"
+        @click="elegirPais(p.codigo)"
+      >{{ p.nombre }} {{ p.simbolo }}</button>
+      <button class="btn-mint" :disabled="busy.moneda || !paisEdit" @click="guardarMoneda">
         <span v-if="busy.moneda" class="spinner"></span>Guardar
       </button>
     </div>
@@ -241,6 +249,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
+import { configurarFormato } from '../utils/formato'
 import { numero } from '../utils/formato'
 import { useAuth } from '../stores/auth'
 import { useTema } from '../composables/useTema'
@@ -249,7 +258,7 @@ import { usePwaUpdate } from '../composables/usePwaUpdate'
 import { archivoADataURL } from '../composables/useFoto'
 const router = useRouter()
 const auth = useAuth()
-const me = ref({ nombre: '', correo: '', moneda: 'COP', foto_url: null as string | null })
+const me = ref({ nombre: '', correo: '', moneda: 'COP', pais: 'CO', pais_nombre: 'Colombia', foto_url: null as string | null })
 const fotoInput = ref<HTMLInputElement | null>(null)
 const cuentas = ref<{ id: string; nombre: string; tipo: string; saldo_actual: number }[]>([])
 const cats = ref<{ id: string; nombre: string; tipo: string; activa: boolean }[]>([])
@@ -282,7 +291,16 @@ async function revisarPwa() {
 const { tema, aplicar: setTema } = useTema()
 const semana = ref(localStorage.getItem('ctd-semana') || 'Lunes')
 const nombreEdit = ref('')
-const monedaEdit = ref('COP')
+const paisEdit = ref('CO')
+const catalogoPaises = ref<{ codigo: string; nombre: string; moneda: string; simbolo: string }[]>([])
+const paisNombre = computed(() => me.value.pais_nombre || me.value.pais || 'Colombia')
+function elegirPais(cod: string) {
+  paisEdit.value = cod
+  // El formato se cambia de una, para que el usuario vea el efecto antes de
+  // guardar y no se entere al salir de Ajustes.
+  const p = catalogoPaises.value.find((x) => x.codigo === cod)
+  if (p) configurarFormato(p.codigo, p.moneda)
+}
 const correoNuevo = ref('')
 const correoPass = ref('')
 const pw = reactive({ code: '', nueva: '', conf: '' })
@@ -326,7 +344,9 @@ async function recargar() {
   twofa.value = e.data.is_2fa_enabled
   // Se lee capacidades y no solo plan: el backend es quien decide, no el boton.
   esPro.value = m.data.plan === 'pro' || !!m.data.capacidades?.export_excel
-  nombreEdit.value = me.value.nombre; monedaEdit.value = me.value.moneda
+  paisEdit.value = m.data.pais || 'CO'
+  configurarFormato(m.data.pais, m.data.moneda)
+  nombreEdit.value = me.value.nombre
 }
 
 async function guardarPerfil() {
@@ -354,7 +374,14 @@ async function quitarFoto() {
 }
 async function guardarMoneda() {
   busy.moneda = true
-  try { await api.patch('/auth/me', { moneda: monedaEdit.value }); me.value.moneda = monedaEdit.value }
+  try {
+    const { data } = await api.patch('/auth/me', { pais: paisEdit.value })
+    me.value = data
+    paisEdit.value = data.pais
+    // El formato se reaplica con lo que devolvio el servidor, no con lo que el
+    // cliente suponia: la moneda pudo cambiar sola al cambiar el pais.
+    configurarFormato(data.pais, data.moneda)
+  }
   finally { busy.moneda = false }
 }
 async function cambiarCorreo() {
@@ -548,7 +575,11 @@ async function buscarUpdate() {
   }, 4500)
 }
 
-onMounted(async () => { rescatarInstall(); await recargar() })
+onMounted(async () => {
+  rescatarInstall()
+  api.get('/auth/paises').then(({ data }) => { catalogoPaises.value = data.items }).catch(() => {})
+  await recargar()
+})
 </script>
 
 <style>

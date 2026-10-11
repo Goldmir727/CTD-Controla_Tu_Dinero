@@ -1,46 +1,92 @@
-/** Formato es-CO de numeros y dinero. Fuente unica: reemplaza el `fmt` duplicado
- *  en 7 vistas (que ademas usaba `$` fijo, asi que elegir EUR renderizaba "$"). */
+/** Formato de numeros y dinero segun el PAIS del usuario. Fuente unica: reemplaza
+ *  el `fmt` duplicado en 7 vistas (que ademas usaba `$` fijo, asi que elegir EUR
+ *  renderizaba "$").
+ *
+ *  Antes el locale estaba en es-CO fijo. Con eso un usuario de Estados Unidos veia
+ *  "$1.234.567" en vez de "$1,234,567": el separador de miles no cambia por el
+ *  codigo de moneda sino por el pais. Y COP, USD y MXN comparten el simbolo "$",
+ *  asi que cambiar de moneda no cambiaba NADA visible.
+ *
+ *  El locale no se pasa por parametro a cada llamada porque eso obligaria a
+ *  tocar todas las vistas. Se configura una vez al cargar la sesion y se usa
+ *  como estado del modulo. */
 
-const LOCALE = 'es-CO'
+export type Formato = { locale: string; simbolo: string; decimales: number; pais: string }
 
+const POR_DEFECTO: Formato = { locale: 'es-CO', simbolo: '$', decimales: 0, pais: 'CO' }
+
+let actual: Formato = { ...POR_DEFECTO }
+
+export function configurarFormato(pais?: string | null, moneda?: string | null) {
+  if (!pais) { actual = { ...POR_DEFECTO }; return actual }
+  const c = pais.toUpperCase()
+  actual = {
+    pais: c,
+    locale: LOCALE_POR_PAIS[c] ?? 'es-CO',
+    simbolo: SIMBOLO_POR_PAIS[c] ?? '$',
+    // El pais manda, pero si no hay dato se cae a la moneda.
+    decimales: DECIMALES_POR_PAIS[c] ?? (DECIMALES[(moneda ?? 'COP').toUpperCase()] ?? 0),
+  }
+  return actual
+}
+
+export function formatoActual(): Formato { return actual }
+
+/** Se usa antes de tener sesion (landing, registro) para no mezclar formatos. */
+export function usarPorDefecto() { actual = { ...POR_DEFECTO } }
+
+export const SIMBOLO_POR_PAIS: Record<string, string> = {
+  CO: '$', MX: '$', US: '$', AR: '$', CL: '$', EC: '$', PE: 'S/', ES: '€', BR: 'R$',
+}
+export const LOCALE_POR_PAIS: Record<string, string> = {
+  CO: 'es-CO', MX: 'es-MX', US: 'en-US', AR: 'es-AR', CL: 'es-CL',
+  EC: 'es-EC', PE: 'es-PE', ES: 'es-ES', BR: 'pt-BR',
+}
+export const DECIMALES_POR_PAIS: Record<string, number> = {
+  CO: 0, MX: 2, US: 2, AR: 2, CL: 0, EC: 2, PE: 2, ES: 2, BR: 2,
+}
 export const SIMBOLO: Record<string, string> = {
-  COP: '$', USD: '$', MXN: '$', EUR: '€'
+  COP: '$', USD: '$', MXN: '$', EUR: '€',
 }
 export const DECIMALES: Record<string, number> = {
   COP: 0, USD: 0, MXN: 0, EUR: 2
 }
 
 export function simbolo(moneda: string | null | undefined): string {
-  return SIMBOLO[(moneda ?? 'COP').toUpperCase()] ?? '$'
+  return actual.simbolo || (SIMBOLO[(moneda ?? 'COP').toUpperCase()] ?? '$')
 }
 
-/** 1800000 -> '1.800.000' */
-export function numero(v: unknown, decimales = 0): string {
+export function locale(): string { return actual.locale }
+
+/** 1800000 -> '1.800.000' en Colombia, '1,800,000' en Estados Unidos */
+export function numero(v: unknown, decimales = actual.decimales): string {
   const n = Number(v ?? 0)
   if (!Number.isFinite(n)) return '0'
-  return n.toLocaleString(LOCALE, {
+  return n.toLocaleString(actual.locale, {
     minimumFractionDigits: decimales,
     maximumFractionDigits: decimales
   })
 }
 
-/** 1800000 con moneda COP -> '$1.800.000'. Sin moneda usa '$' (retrocompatible). */
+/** 1800000 en Colombia -> '$1.800.000'; en Estados Unidos -> '$1,800,000.00'. */
 export function dinero(v: unknown, moneda?: string | null, decimales?: number): string {
-  const m = (moneda ?? 'COP').toUpperCase()
-  const d = decimales ?? DECIMALES[m] ?? 0
-  return `${simbolo(m)}${numero(v, d)}`
+  // El parametro `moneda` se sigue aceptando por compatibilidad con las llamadas
+  // viejas, pero el simbolo y los decimales los manda el PAIS: si el usuario esta
+  // en Estados Unidos y por error quedo en COP, tiene que ver dolares.
+  const d = decimales ?? (moneda ? (DECIMALES[(moneda).toUpperCase()] ?? actual.decimales)
+    : actual.decimales)
+  return `${simbolo(moneda)}${numero(v, d)}`
 }
 
 /** Compacto para tarjetas donde no cabe el numero completo: 1.8M, 250k */
 export function dineroCorto(v: unknown, moneda?: string | null): string {
-  const m = (moneda ?? 'COP').toUpperCase()
   const n = Number(v ?? 0)
   const abs = Math.abs(n)
   const signo = n < 0 ? '-' : ''
-  if (abs >= 1_000_000_000) return `${signo}${simbolo(m)}${numero(abs / 1_000_000_000, 1)}MM`
-  if (abs >= 1_000_000) return `${signo}${simbolo(m)}${numero(abs / 1_000_000, 1)}M`
-  if (abs >= 10_000) return `${signo}${simbolo(m)}${numero(abs / 1000, 0)}k`
-  return `${signo}${simbolo(m)}${numero(abs, DECIMALES[m] ?? 0)}`
+  if (abs >= 1_000_000_000) return `${signo}${simbolo(moneda)}${numero(abs / 1_000_000_000, 1)}MM`
+  if (abs >= 1_000_000) return `${signo}${simbolo(moneda)}${numero(abs / 1_000_000, 1)}M`
+  if (abs >= 10_000) return `${signo}${simbolo(moneda)}${numero(abs / 1000, 0)}k`
+  return `${signo}${simbolo(moneda)}${numero(abs, actual.decimales)}`
 }
 
 export function porcentaje(v: unknown, decimales = 1): string {

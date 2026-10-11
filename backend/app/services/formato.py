@@ -29,22 +29,45 @@ def decimales_moneda(codigo: str) -> int:
     return int(MONEDAS.get((codigo or "").upper(), MONEDAS["COP"])["decimales"])
 
 
-def numero_es(valor: float | int | None, decimales: int = 0) -> str:
-    """1234567.89 -> '1.234.567,89' (punto de miles, coma decimal)."""
+def numero_es(valor: float | int | None, decimales: int = 0, pais: str | None = None) -> str:
+    """1234567.89 -> '1.234.567,89' en Colombia, '1,234,567.89' en Estados Unidos.
+
+    El separador lo da el PAIS y viene explicito en el catalogo, no deducido del
+    locale: es-MX usa coma y es-PE usa punto, y las dos son espanol. Adivinar por
+    el locale las equivoca justo en los paises que mas importan.
+    """
     v = float(valor or 0)
     neg = v < 0
     s = f"{abs(v):,.{decimales}f}"
     entero, _, frac = s.partition(".")
-    entero = entero.replace(",", ".")
-    out = entero + ("," + frac if frac else "")
+    if pais:
+        from app.services import paises
+
+        sep_m, sep_d = paises.separadores(pais)
+    else:
+        sep_m, sep_d = ".", ","
+    entero = entero.replace(",", sep_m)
+    out = entero + (sep_d + frac if frac else "")
     return f"-{out}" if neg else out
 
 
-def dinero(valor: float | int | None, moneda: str = "COP", decimales: int | None = None) -> str:
-    """1.800.000 con moneda COP -> '$1.800.000'."""
-    if decimales is None:
-        decimales = decimales_moneda(moneda)
-    return f"{simbolo_moneda(moneda)}{numero_es(valor, decimales)}"
+def dinero(valor: float | int | None, moneda: str = "COP", decimales: int | None = None,
+           pais: str | None = None) -> str:
+    """1800000 en Colombia -> '$1.800.000'; en Estados Unidos -> '$1,800,000.00'.
+
+    Sin `pais` se comporta como antes: simbolo y formato salen de la MONEDA. Es
+    lo que necesitan las llamadas viejas y las que no saben de pais (los
+    documentos, el PDF). Con pais, el pais manda sobre los dos.
+    """
+    from app.services import paises
+
+    if pais:
+        sim = paises.simbolo_de(pais, moneda)
+        dec = decimales if decimales is not None else paises.decimales_de(pais, moneda)
+    else:
+        sim = simbolo_moneda(moneda)
+        dec = decimales if decimales is not None else decimales_moneda(moneda)
+    return f"{sim}{numero_es(valor, dec, pais)}"
 
 
 def porcentaje(valor: float | None, decimales: int = 1) -> str:

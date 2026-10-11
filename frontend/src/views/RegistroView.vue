@@ -35,9 +35,16 @@
           </div>
         </div>
         <div class="field">
-          <label for="moneda">Moneda</label>
-          <select id="moneda" v-model="f.moneda" class="input"><option>COP</option><option>USD</option><option>MXN</option><option>EUR</option></select>
-        </div>
+<label for="pais">País</label>
+        <select id="pais" v-model="f.pais" class="input">
+          <option v-for="p in paises" :key="p.codigo" :value="p.codigo">
+            {{ p.nombre }} · {{ p.simbolo }} {{ p.moneda }}
+          </option>
+        </select>
+        <p class="sub" style="margin:-4px 0 0">
+          Lo detectamos por el idioma de tu navegador. Puedes cambiarlo en Ajustes.
+        </p>
+      </div>
         <label class="check"><input type="checkbox" v-model="f.t" /> Acepto los <a href="#" @click.prevent="$router.push('/terminos')">Términos y Condiciones</a></label>
         <label class="check"><input type="checkbox" v-model="f.d" /> Acepto la <a href="#" @click.prevent="$router.push('/datos')">Política de Tratamiento de Datos</a> (Ley 1581 de 2012)</label>
         <button class="btn-primary" :disabled="loading || !f.t || !f.d">{{ loading ? 'Creando…' : 'Crear y continuar' }}</button>
@@ -48,19 +55,52 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Logo from '../components/Logo.vue'
 import { useTema } from '../composables/useTema'
 import { archivoADataURL } from '../composables/useFoto'
 import api from '../services/api'
+import { configurarFormato } from '../utils/formato'
 import { useAuth } from '../stores/auth'
 const { tema, aplicar } = useTema()
 const oscuro = computed(() => tema.value === 'dark')
 function toggleTema() { aplicar(oscuro.value ? 'light' : 'dark') }
 const router = useRouter()
 const auth = useAuth()
-const f = reactive({ nombre: '', correo: '', password: '', moneda: 'COP', foto: null as string | null, t: false, d: false })
+const f = reactive({ nombre: '', correo: '', password: '', moneda: 'COP', pais: 'CO', foto: null as string | null, t: false, d: false })
+/**
+ * El pais se deduce del idioma del navegador, no de la geolocalizacion por IP.
+ * Pedir la ubicacion real exigiria permiso del navegador o un servicio externo:
+ * para decir "estas en Mexico" o "estas en Colombia" el idioma alcanza, y quien
+ * viaja lo cambia en Ajustes en un toque.
+ */
+const paises = ref<{ codigo: string; nombre: string; moneda: string; simbolo: string }[]>([])
+const PAIS_POR_LOCALE: Record<string, string> = {
+  'es-CO': 'CO', 'es-MX': 'MX', 'en-US': 'US', 'es-AR': 'AR',
+  'es-CL': 'CL', 'es-PE': 'PE', 'es-EC': 'EC', 'es-ES': 'ES', 'pt-BR': 'BR',
+}
+function paisDelNavegador(): string {
+  const tag = typeof navigator !== 'undefined' ? (navigator.language || '') : ''
+  if (PAIS_POR_LOCALE[tag]) return PAIS_POR_LOCALE[tag]
+  // 'es' a secas: casi todos los navegadores en espanol envian solo 'es', y no
+  // dice pais. Colombia es el mejor default porque es de donde nace la app.
+  if (tag.toLowerCase().startsWith('es')) return 'CO'
+  return 'CO'
+}
+f.pais = paisDelNavegador()
+
+// El catalogo se pide sin sesion: por eso /auth/paises no exige token.
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/auth/paises')
+    paises.value = data.items
+  } catch {
+    paises.value = [{ codigo: 'CO', nombre: 'Colombia', moneda: 'COP', simbolo: '$' }]
+  }
+  const elegido = paises.value.find((p) => p.codigo === f.pais)
+  if (elegido) { f.moneda = elegido.moneda; configurarFormato(elegido.codigo, elegido.moneda) }
+})
 const e = ref('')
 const eFoto = ref('')
 const fotoInput = ref<HTMLInputElement | null>(null)
@@ -79,7 +119,7 @@ async function go() {
   e.value = ''; loading.value = true
   f.correo = f.correo.trim().toLowerCase()
   try {
-    await api.post('/auth/registro', { nombre: f.nombre, correo: f.correo, password: f.password, moneda: f.moneda, foto_url: f.foto, acepta_terminos: f.t, acepta_datos: f.d })
+    await api.post('/auth/registro', { nombre: f.nombre, correo: f.correo, password: f.password, pais: f.pais, foto_url: f.foto, acepta_terminos: f.t, acepta_datos: f.d })
     const { data } = await api.post('/auth/login', { correo: f.correo, password: f.password })
     auth.setTokens(data.access_token, data.refresh_token)
     auth.setOnboarding(false)

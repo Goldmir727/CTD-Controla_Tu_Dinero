@@ -11,14 +11,22 @@
  * se vea rara.
  */
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { PASOS, type Paso } from '../tour/pasos'
+import { pasosPara, type ContextoPais, type Paso } from '../tour/pasos'
 
-const CLAVE = 'ctd-tour-v3'
+const CLAVE = 'ctd-tour-v4'
 const abierto = ref(false)
 const indice = ref(0)
 const caja = ref<{ top: number; left: number; width: number; height: number } | null>(null)
-const paso = computed<Paso | null>(() => PASOS[indice.value] ?? null)
-const esUltimo = computed(() => indice.value === PASOS.length - 1)
+const ctx = ref<ContextoPais>({ pais: 'CO', nombre: 'Colombia', usaQuincena: true })
+
+/** Los pasos dependen del pais: en uno sin quincena el texto de ese paso seria mentira. */
+const PASOS = computed(() => pasosPara(ctx.value))
+const paso = computed<Paso | null>(() => PASOS.value[indice.value] ?? null)
+const esUltimo = computed(() => indice.value === PASOS.value.length - 1)
+const textoPaso = computed(() => {
+  const t = paso.value?.texto
+  return typeof t === 'function' ? t(ctx.value) : (t ?? '')
+})
 
 /** Omitir es una decision, no un fallo: se guarda igual que terminarlo. */
 function marcar(nombre: string) {
@@ -50,6 +58,31 @@ function atras() {
 }
 
 /**
+ * Modo tutorial: mientras esta activo, moverse por la app NO cierra el
+ * recorrido, y el elemento resaltado se vuelve a medir en cada cambio de
+ * pantalla. Si no, el tour se quedaria apuntando a un elemento que ya no existe.
+ *
+ * Se sale del modo tutorial cuando el usuario hace clic FUERA de la tarjeta y
+ * del elemento señalado (navegar, explorar, cerrar). Ese es el gesto de
+ * "ya entendi, dejame usar la app", y por eso lo respeta sin preguntar.
+ */
+const modoTutorial = ref(false)
+
+/** Click fuera = salir del tutorial, pero sin marcarlo como omitido. */
+function salirALibre() {
+  modoTutorial.value = false
+  abierto.value = false
+  caja.value = null
+}
+
+/** Se llama desde App.vue cuando cambia la ruta mientras el tour esta abierto. */
+function alNavegar() {
+  if (!abierto.value) return
+  modoTutorial.value = true
+  void medir()
+}
+
+/**
  * Primer elemento VISIBLE que coincide con el selector.
  *
  * Hace falta porque hay dos formas de capturar y solo una existe a la vez: el
@@ -65,14 +98,20 @@ function primerVisible(sel: string): HTMLElement | null {
   return null
 }
 
-/** Ubica el elemento y pone la tarjeta al lado pedido sin salirse. */
+/**
+ * Ubica el elemento y pone la tarjeta al lado pedido sin salirse.
+ *
+ * En modo tutorial NO se salta un paso cuyo selector no aparece: si el usuario
+ * esta mirando otra pantalla, se queda en el paso y espera a que vuelva. Saltarse
+ * perderia la leccion sin que el usuario la haya visto.
+ */
 async function medir() {
   await nextTick()
   const p = paso.value
   if (!p?.selector) { caja.value = null; return }
   const el = primerVisible(p.selector)
   if (!el) {
-    // No hay nada que señalar en esta pantalla: se pasa al siguiente paso.
+    if (modoTutorial.value) { caja.value = null; return }
     if (!esUltimo.value) { indice.value += 1; return medir() }
     caja.value = null
     return
@@ -133,12 +172,27 @@ onBeforeUnmount(() => {
 
 watch(indice, () => void medir())
 
-defineExpose({ abrir, pendiente, cerrar })
+/**
+ * El pais llega desde App.vue porque ahi ya se sabe de la sesion. Se mira en
+ * watch y no solo al montar: el tour puede abrirse antes de que /auth/me
+ * responda, y con un solo watch se perderia el texto de quincena.
+ */
+watch(() => props.pais, (p) => {
+  if (p && p.pais) ctx.value = p
+  if (abierto.value) void medir()
+}, { deep: true })
+
+const props = defineProps<{ pais?: ContextoPais | null }>()
+
+defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
 </script>
 
 <template>
-  <div v-if="abierto && paso" class="tour">
-    <div class="tour-backdrop" @click="saltar"></div>
+  <div v-if="abierto && paso" class="tour" :class="{ tutorial: modoTutorial }">
+    <!-- El fondo NO es un "cerrar": es el gesto de "ya entendi, dejame usar la
+         app". Por eso sale del modo tutorial sin marcarlo como omitido, para que
+         Ajustes siga diciendo "Ver" y no "Repetir". -->
+    <div class="tour-backdrop" @click="salirALibre"></div>
 
     <div
       v-if="agujero"
@@ -153,7 +207,7 @@ defineExpose({ abrir, pendiente, cerrar })
         <span v-if="agujero" class="tour-flecha"></span>
       </p>
       <h3>{{ paso.titulo }}</h3>
-      <p class="tour-texto">{{ paso.texto }}</p>
+      <p class="tour-texto">{{ textoPaso }}</p>
 
       <div class="tour-puntos" aria-hidden="true">
         <span
@@ -171,14 +225,26 @@ defineExpose({ abrir, pendiente, cerrar })
           {{ esUltimo ? 'Listo' : 'Siguiente' }}
         </button>
       </div>
-      <p class="tour-pie">También con las flechas del teclado. Esc para omitir.</p>
+      <p class="tour-pie">
+        <template v-if="modoTutorial">
+          Puedes seguir usando la app: el recorrido espera. Haz clic fuera para salir.
+        </template>
+        <template v-else>
+          También con las flechas del teclado. Esc para omitir.
+        </template>
+      </p>
     </div>
   </div>
 </template>
 
 <style scoped>
 .tour { position: fixed; inset: 0; z-index: 90; }
+/* En modo tutorial el fondo NO bloquea la app: el usuario tiene que poder
+   seguir usándola, que es justo lo que se le pidio. */
 .tour-backdrop { position: absolute; inset: 0; }
+.tour.tutorial .tour-backdrop { background: transparent; pointer-events: none; }
+.tour.tutorial .tour-agujero { outline-color: var(--mint); }
+.tour-card { position: relative; }
 
 /* El agujero: un div del tamaño del elemento con una sombra que tapa todo lo
    demás. El puntero se desactiva para no comerse los clics de la tarjeta. */

@@ -11,7 +11,7 @@
     </header>
     <router-view :key="tick" />
     <CapturaRapida @guardado="refrescarTrasCaptura" />
-    <TourGuias ref="tour" />
+    <TourGuias ref="tour" :pais="ctxPais" />
     <InstallPrompt />
     <UpdateBanner />
     <CookieBanner />
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import InstallPrompt from './components/InstallPrompt.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
@@ -52,6 +52,7 @@ import Logo from './components/Logo.vue'
 import api from './services/api'
 import { useAuth } from './stores/auth'
 import { useTema } from './composables/useTema'
+import { configurarFormato, usarPorDefecto } from './utils/formato'
 const route = useRoute()
 
 // Tras una captura hay que recargar la vista actual. Cambiar la key del router-view
@@ -105,16 +106,24 @@ function onVisible() {
  * dos pasos no tendrian nada que señalar y se perderian en silencio. Peor: el
  * usuario veria un tour mas corto y pensaria que le faltaba informacion.
  */
+/**
+ * Mientras el recorrido esta abierto, moverse por la app lo pone en modo
+ * tutorial: no se cierra, solo se vuelve a medir el elemento en la pantalla
+ * nueva. El usuario decide cuando salir, con un clic fuera.
+ */
+watch(() => route.path, () => tour.value?.alNavegar())
+
 const tour = ref<InstanceType<typeof TourGuias> | null>(null)
 
 async function abrirTour() {
+  modoTutorial.value = false
   if (route.path !== '/inicio') {
     await router.push('/inicio').catch(() => {})
-    // Margen para que el Dashboard termine de pedir sus datos y pintar.
     await new Promise((r) => setTimeout(r, 420))
   }
   tour.value?.abrir()
 }
+const modoTutorial = ref(false)
 function onPedirTour() { void abrirTour() }
 onMounted(() => {
   useTema().init()
@@ -122,11 +131,24 @@ onMounted(() => {
   window.addEventListener('ctd:ver-tour', onPedirTour)
   document.addEventListener('visibilitychange', onVisible)
   void validarSesion(true)
+  // El formato de dinero y numeros se fija desde la sesion, no desde la moneda
+  // suelta: con es-CO fijo un usuario de Estados Unidos veia 1.234.567.
+  if (authed.value) {
+    api.get('/auth/me').then(({ data }) => {
+      configurarFormato(data.pais, data.moneda)
+      // El texto del recorrido depende del pais: en uno sin quincena, el paso
+      // "tu quincena" seria mentira.
+      ctxPais.value = { pais: data.pais, nombre: data.pais_nombre, usaQuincena: data.usa_quincena }
+    }).catch(() => usarPorDefecto())
+  } else {
+    usarPorDefecto()
+  }
   if (authed.value && tour.value?.pendiente()) {
-    // Un momento de margen para que la pantalla ya este pintada: si se abre en
-    // el mismo tick que el montaje, el primer elemento todavia mide cero.
     setTimeout(() => void abrirTour(), 900)
   }
+})
+const ctxPais = ref<{ pais: string; nombre: string; usaQuincena: boolean }>({
+  pais: 'CO', nombre: 'Colombia', usaQuincena: true,
 })
 onUnmounted(() => {
   window.removeEventListener('ctd:sesion-cerrada', onSesionCerrada)

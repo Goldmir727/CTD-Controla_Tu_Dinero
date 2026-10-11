@@ -16,6 +16,9 @@ class RegistroIn(BaseModel):
     correo: CorreoLimpio
     password: str = Field(min_length=8)
     moneda: str = Field(default="COP", pattern="^(COP|USD|MXN|EUR)$")
+    # Lo deduce el navegador (navigator.language) y el usuario puede cambiarlo
+    # en Ajustes. Nullable de entrada para no romper registros ya hechos.
+    pais: str | None = Field(default=None, min_length=2, max_length=2)
     foto_url: str | None = None
     acepta_terminos: bool = False
     acepta_datos: bool = False
@@ -40,6 +43,10 @@ class RefreshIn(BaseModel):
 class UserPatch(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     moneda: str | None = Field(default=None, pattern="^(COP|USD|MXN|EUR)$")
+    # Cambiar el pais cambia el formato entero y, si el pais usa quincena, la
+    # forma de razonar de la app. La moneda se ajusta sola para que no queden
+    # las dos cosas en contra: elegir Mexico y que siga diciendo COP no sirve.
+    pais: str | None = Field(default=None, min_length=2, max_length=2)
     foto_url: str | None = None
 
 
@@ -111,6 +118,7 @@ class UserOut(BaseModel):
 def user_out(user) -> UserOut:
     from app.core.plan import config_plan, plan_efectivo
     from app.core.legal import DATOS_VERSION, TERMINOS_VERSION
+    from app.services import paises
     from app.services.formato import simbolo_moneda
 
     cfg = config_plan(user)
@@ -124,7 +132,11 @@ def user_out(user) -> UserOut:
                    acepta_datos=(user.acepta_datos_at is not None
                                  and user.datos_version == DATOS_VERSION),
                    plan=plan_efectivo(user),
-                   simbolo_moneda=simbolo_moneda(user.moneda),
+                   simbolo_moneda=paises.simbolo_de(user.pais, user.moneda),
+    pais=(user.pais or paises.DEFAULT),
+    pais_nombre=paises.nombre(user.pais),
+    usa_quincena=paises.usa_quincena(user.pais),
+    locale=paises.locale_de(user.pais, user.moneda),
                    capacidades={k: bool(v) for k, v in cfg.items() if isinstance(v, bool)},
                    asesor_consultas_dia=int(cfg["asesor_dia"]))
 

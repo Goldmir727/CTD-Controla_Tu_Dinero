@@ -65,16 +65,30 @@ entienda mal los números.
 **Disponible** es tu saldo real hoy: la suma de todas tus cuentas menos lo que
 deben.
 
-**Cierra en** es una proyección: si sigues al mismo ritmo, así vas a terminar la
-quincena. Asume tu ritmo actual y los gastos fijos que faltan por vencer. **No
+**Cierra en** es una proyección: si sigues al mismo ritmo, así vas a terminar el
+periodo. Asume tu ritmo actual y los gastos fijos que faltan por vencer. **No
 adivina ingresos**, así que si te pagan algo que no está registrado, ahí no lo
 cuenta.
 
 ### Qué es una quincena
 
-En Colombia se cobra dos veces al mes: los días 1–15 y 16–30 (o 31). CTD razona
-en quincenas, no en meses, porque el mes es demasiado tarde: cuando ves "gastaste
-2 millones en octubre" ya no puedes hacer nada.
+CTD razona en **quincenas** en los países donde se cobra dos veces al mes
+(Colombia, México, Argentina). Si tu país no es de esos, razona **por mes**, y
+por eso el texto y las fechas cambian solos.
+
+Puedes cambiar el país en **Ajustes → País y moneda**, que también cambia el
+formato de los números:
+
+| País | Se ve así |
+|---|---|
+| Colombia | $1.800.000 |
+| México | $1,800,000.00 |
+| Estados Unidos | $1,800,000.00 |
+| España | €1.800.000,00 |
+| Perú | S/1,800,000.00 |
+
+Que el número se vea distinto **no significa que valga distinto**: la app no
+convierte entre monedas, cambia cómo se muestra.
 
 ---
 

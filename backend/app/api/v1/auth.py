@@ -12,6 +12,7 @@ from app.models.finance import Account, Budget, Category, PaymentMethod, Transac
 from app.models.perfil import Perfil
 from app.models.user import User
 from app.schemas.auth import ConsentimientoIn, CorreoCambiarIn, LoginIn, LoginOut, OnboardingIn, PasswordConfirmarIn, PasswordSolicitarIn, RefreshIn, RegistroIn, TokenOut, TwoFaActivarIn, TwoFaSolicitarIn, TwoFaVerificarIn, UserOut, UserPatch, user_out
+from app.services import paises
 from app.services import password_reset as pw_svc
 from app.services import twofa as twofa_svc
 
@@ -41,9 +42,13 @@ def registro(data: RegistroIn, db: Session = Depends(get_db)):
     if db.query(User).filter_by(correo=data.correo).first():
         raise HTTPException(status_code=409, detail="Ese correo ya está registrado")
     ahora = datetime.now(timezone.utc).replace(tzinfo=None)
-    from app.services.imagenes import validar_imagen
     validar_imagen(data.foto_url, 300_000)
+    # El pais manda sobre moneda y formato. Se toma del navegador y, si no vino,
+    # de la moneda elegida: cada moneda que aceptabamos apuntaba a un solo pais.
+    pais = data.pais if paises.existe(data.pais) else paises.MONEDA_A_PAIS.get(
+        data.moneda, paises.DEFAULT)
     user = User(nombre=data.nombre, correo=data.correo, password_hash=hash_password(data.password), moneda=data.moneda,
+                pais=pais,
                 foto_url=data.foto_url,
                 acepta_terminos_at=ahora, terminos_version=TERMINOS_VERSION,
                 acepta_datos_at=ahora, datos_version=DATOS_VERSION)
@@ -120,12 +125,21 @@ def me(user: User = Depends(get_current_user)):
 
 @router.patch("/auth/me", response_model=UserOut)
 def patch_me(data: UserPatch, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    from app.services.imagenes import validar_imagen
-
     patch = data.model_dump(exclude_unset=True)
     if "foto_url" in patch:
         validar_imagen(patch["foto_url"], 300_000)
         user.foto_url = patch.pop("foto_url") or None
+    if "pais" in patch and patch["pais"]:
+        from app.services import paises as _paises
+        cod = str(patch["pais"]).upper()
+        if not _paises.existe(cod):
+            raise HTTPException(422, "Ese país no está en la lista")
+        user.pais = cod
+            # La moneda sigue al pais si el usuario no dijo otra cosa. Elegir
+            # Mexico y que la app siga formateando en pesos colombianos seria
+            # peor que no haber ofrecido la opcion.
+        if "moneda" not in patch:
+            user.moneda = _paises.moneda_de(cod)
     for k, v in patch.items():
         setattr(user, k, v)
     db.commit()
@@ -177,6 +191,15 @@ def desactivar_2fa(db: Session = Depends(get_db), user: User = Depends(get_curre
     db.commit()
     return {"ok": True, "is_2fa_enabled": False}
 
+
+@router.get("/auth/paises")
+def listar_paises():
+    """Catalogo de paises para el selector de Ajustes.
+
+    Sin sesion a proposito: el registro necesita offercerlo antes de tener cuenta.
+    """
+    from app.services import paises as _paises
+    return {"items": _paises.catalogo()}
 
 @router.get("/auth/2fa/estado")
 def estado_2fa(user: User = Depends(get_current_user)):
