@@ -1,5 +1,5 @@
 <template>
-  <main class="page rise">
+  <main class="page rise dashboard">
     <p class="eyebrow">{{ saludo }}, {{ nombre }}</p>
     <section class="card-featured" style="margin: 12px 0 16px">
       <div class="eyebrow" style="color: #B9C2E0">DISPONIBLE</div>
@@ -32,7 +32,7 @@
       <button class="btn-mint" @click="$router.push('/config')">Revisar perfiles</button>
     </section>
 
-    <section v-if="revision" class="card revision">
+    <section v-if="revision" class="card revision" data-tour="quincena">
       <div class="revision-cab">
         <div>
           <div class="eyebrow">{{ revision.etiqueta_legible }}</div>
@@ -71,7 +71,7 @@
         </li>
       </ul>
 
-      <div v-for="a in revision.alertas" :key="a.categoria_id" class="alerta-ritmo">
+      <div v-for="a in revision.alertas" :key="a.categoria_id" class="alerta-ritmo" data-tour="alerta">
         <i class="bi" :class="a.estado === 'excedido' ? 'bi-exclamation-octagon-fill' : 'bi-speedometer2'"></i>
         <p>{{ a.mensaje }}</p>
       </div>

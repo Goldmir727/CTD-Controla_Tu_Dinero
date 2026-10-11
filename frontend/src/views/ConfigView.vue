@@ -210,6 +210,12 @@
     </div>
     <p v-if="instalarMsg" class="sub">{{ instalarMsg }}</p>
     <button class="item" @click="toggle('pwa')"><span>Estado de instalación</span><span>›</span></button>
+
+    <div class="item tour-item">
+      <span>Recorrido guiado<small>Repasa en 40 segundos todo lo que puedes hacer aquí</small></span>
+      <button v-if="tourPendiente" class="btn-new mini" @click="abrirTour">Ver</button>
+      <button class="btn-ghost mini" @click="abrirTour">Repetir</button>
+    </div>
     <div v-if="open === 'pwa'" class="panel">
       <div v-for="c in diag" :key="c.label" class="line">
         <span>{{ c.ok === null ? '○' : c.ok ? '✓' : '✗' }} {{ c.label }}<br /><small>{{ c.detalle }}</small></span>
@@ -291,6 +297,15 @@ const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', meto
 // El boton se deshabilita si no eres PRO, pero el usuario tiene que poder LEER
 // por que esta bloqueado: un boton muerto sin explicacion parece un error.
 const esPro = ref(false)
+
+// El recorrido vive en App.vue (lo tiene que montar ahi para estar por encima de
+// todo). Se le avisa por evento, igual que el cierre de sesion.
+const tourPendiente = ref(false)
+function abrirTour() { window.dispatchEvent(new CustomEvent('ctd:ver-tour')) }
+onMounted(() => {
+  try { tourPendiente.value = !JSON.parse(localStorage.getItem('ctd-tour-v3') || '{}').visto }
+  catch { tourPendiente.value = false }
+})
 const fmt = (n: number) => numero(n)
 const correoMask = computed(() => {
   const [u = '', d = ''] = me.value.correo.split('@')
@@ -553,4 +568,7 @@ onMounted(async () => { rescatarInstall(); await recargar() })
 .btn-logout:disabled{opacity:.6;cursor:wait}
 .candado{display:flex;gap:6px;align-items:flex-start;margin:0;color:var(--warning);opacity:1;font-size:12.5px;line-height:1.45}
 .candado i{margin-top:2px;flex:none}
+.tour-item{align-items:center;cursor:default}
+.tour-item small{display:block;opacity:.65;font-size:12px;margin-top:2px}
+.mini{padding:7px 14px;font-size:13px;flex:none}
 </style>
