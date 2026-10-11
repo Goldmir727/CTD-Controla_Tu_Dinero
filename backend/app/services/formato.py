@@ -1,8 +1,22 @@
-"""Formato de numeros y dinero (es-CO) para API, Excel y PDF.
+"""Formato de numeros y dinero para API, Excel y PDF.
 
 Por que existe: el frontend tiene `fmt` duplicado en 7 vistas con el simbolo `$`
 hardcodeado (elegir EUR renderizaba "$"), y el asesor IA inventaba simbolos porque
 el contexto nunca le decia la moneda del usuario. Esta es la unica fuente.
+
+SEPARACION IMPORTANTE: la MONEDA es la unidad del numero y el PAIS es solo la
+forma de escribirlo. No son lo mismo y confundirlas convierte datos.
+
+El bug que casi se manda: al anadir el pais, el simbolo y los decimales pasaron a
+salir del pais. Un usuario con 1.800.000 pesos (unos 450 dolares) que cambiaba el
+pais a Estados Unidos veia "$1,800,000.00": el numero no convertia, se le
+cambiaba la etiqueta, y la app le decia que era 4000 veces mas plata de la que
+tenia.
+
+Por eso:
+  - simbolo y decimales salen SIEMPRE de la moneda
+  - el pais solo cambia los separadores (punto o coma de miles)
+Cambiar de pais nunca convierte ni reetiqueta dinero.
 
 Se implementa a mano (no `locale`) para no depender de locales del sistema en la
 imagen python:3.12-slim.
@@ -11,9 +25,13 @@ import re
 
 MONEDAS: dict[str, dict[str, str]] = {
     "COP": {"simbolo": "$", "nombre": "pesos colombianos", "decimales": "0"},
-    "USD": {"simbolo": "$", "nombre": "dólares", "decimales": "0"},
-    "MXN": {"simbolo": "$", "nombre": "pesos mexicanos", "decimales": "0"},
+    "USD": {"simbolo": "$", "nombre": "dólares", "decimales": "2"},
+    "MXN": {"simbolo": "$", "nombre": "pesos mexicanos", "decimales": "2"},
     "EUR": {"simbolo": "€", "nombre": "euros", "decimales": "2"},
+    "ARS": {"simbolo": "$", "nombre": "pesos argentinos", "decimales": "2"},
+    "CLP": {"simbolo": "$", "nombre": "pesos chilenos", "decimales": "0"},
+    "PEN": {"simbolo": "S/", "nombre": "soles", "decimales": "2"},
+    "BRL": {"simbolo": "R$", "nombre": "realesBrasilenos", "decimales": "2"},
 }
 
 
@@ -53,20 +71,17 @@ def numero_es(valor: float | int | None, decimales: int = 0, pais: str | None = 
 
 def dinero(valor: float | int | None, moneda: str = "COP", decimales: int | None = None,
            pais: str | None = None) -> str:
-    """1800000 en Colombia -> '$1.800.000'; en Estados Unidos -> '$1,800,000.00'.
+    """1800000 COP -> '$1.800.000' (Colombia) o '$1,800,000' (Estados Unidos).
 
-    Sin `pais` se comporta como antes: simbolo y formato salen de la MONEDA. Es
-    lo que necesitan las llamadas viejas y las que no saben de pais (los
-    documentos, el PDF). Con pais, el pais manda sobre los dos.
+    El simbolo y los decimales salen de la MONEDA. El pais solo cambia los
+    separadores. Con esto, cambiar de pais no convierte ni reetiqueta nada: los
+    1.800.000 pesos siguen siendo 1.800.000 pesos, solo se escriben distinto.
+
+    Convierte de verdad es otra operacion, y esta app no la hace: no tiene tipo de
+    cambio y no puede inventarse uno.
     """
-    from app.services import paises
-
-    if pais:
-        sim = paises.simbolo_de(pais, moneda)
-        dec = decimales if decimales is not None else paises.decimales_de(pais, moneda)
-    else:
-        sim = simbolo_moneda(moneda)
-        dec = decimales if decimales is not None else decimales_moneda(moneda)
+    sim = simbolo_moneda(moneda)
+    dec = decimales if decimales is not None else decimales_moneda(moneda)
     return f"{sim}{numero_es(valor, dec, pais)}"
 
 

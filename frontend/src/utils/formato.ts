@@ -11,22 +11,28 @@
  *  tocar todas las vistas. Se configura una vez al cargar la sesion y se usa
  *  como estado del modulo. */
 
-export type Formato = { locale: string; simbolo: string; decimales: number; pais: string }
+/**
+ * El simbolo y los decimales salen SIEMPRE de la MONEDA. El pais solo cambia
+ * los separadores.
+ *
+ * Este es el bug que ya se comio una vez: al meter el pais, el simbolo paso a
+ * salir de ahi y un usuario con 1.800.000 pesos (unos 450 dolares) que cambiaba
+ * el pais a Estados Unidos veia "$1,800,000.00". El numero no convertia, se le
+ * cambiaba la etiqueta, y la app le decia que tenia 4000 veces mas plata.
+ *
+ * Cambiar de pais no convierte ni reetiqueta dinero. Convertir de verdad es otra
+ * operacion y esta app no la hace: no tiene tipo de cambio ni puede inventarse uno.
+ */
+export type Formato = { locale: string; pais: string }
 
-const POR_DEFECTO: Formato = { locale: 'es-CO', simbolo: '$', decimales: 0, pais: 'CO' }
+const POR_DEFECTO: Formato = { locale: 'es-CO', pais: 'CO' }
 
 let actual: Formato = { ...POR_DEFECTO }
 
-export function configurarFormato(pais?: string | null, moneda?: string | null) {
+export function configurarFormato(pais?: string | null, _moneda?: string | null) {
   if (!pais) { actual = { ...POR_DEFECTO }; return actual }
   const c = pais.toUpperCase()
-  actual = {
-    pais: c,
-    locale: LOCALE_POR_PAIS[c] ?? 'es-CO',
-    simbolo: SIMBOLO_POR_PAIS[c] ?? '$',
-    // El pais manda, pero si no hay dato se cae a la moneda.
-    decimales: DECIMALES_POR_PAIS[c] ?? (DECIMALES[(moneda ?? 'COP').toUpperCase()] ?? 0),
-  }
+  actual = { pais: c, locale: LOCALE_POR_PAIS[c] ?? 'es-CO' }
   return actual
 }
 
@@ -35,31 +41,37 @@ export function formatoActual(): Formato { return actual }
 /** Se usa antes de tener sesion (landing, registro) para no mezclar formatos. */
 export function usarPorDefecto() { actual = { ...POR_DEFECTO } }
 
-export const SIMBOLO_POR_PAIS: Record<string, string> = {
-  CO: '$', MX: '$', US: '$', AR: '$', CL: '$', EC: '$', PE: 'S/', ES: '€', BR: 'R$',
+export const SIMBOLO: Record<string, string> = {
+  COP: '$', USD: '$', MXN: '$', EUR: '€',
+  ARS: '$', CLP: '$', PEN: 'S/', BRL: 'R$',
 }
+export const DECIMALES: Record<string, number> = {
+  COP: 0, USD: 2, MXN: 2, EUR: 2,
+  ARS: 2, CLP: 0, PEN: 2, BRL: 2,
+}
+/** Solo el PAIS cambia el separador de miles. */
 export const LOCALE_POR_PAIS: Record<string, string> = {
   CO: 'es-CO', MX: 'es-MX', US: 'en-US', AR: 'es-AR', CL: 'es-CL',
   EC: 'es-EC', PE: 'es-PE', ES: 'es-ES', BR: 'pt-BR',
 }
-export const DECIMALES_POR_PAIS: Record<string, number> = {
-  CO: 0, MX: 2, US: 2, AR: 2, CL: 0, EC: 2, PE: 2, ES: 2, BR: 2,
-}
-export const SIMBOLO: Record<string, string> = {
-  COP: '$', USD: '$', MXN: '$', EUR: '€',
-}
-export const DECIMALES: Record<string, number> = {
-  COP: 0, USD: 0, MXN: 0, EUR: 2
-}
 
+/** El simbolo es de la MONEDA. Cambiar de pais no lo cambia. */
 export function simbolo(moneda: string | null | undefined): string {
-  return actual.simbolo || (SIMBOLO[(moneda ?? 'COP').toUpperCase()] ?? '$')
+  return SIMBOLO[(moneda ?? 'COP').toUpperCase()] ?? '$'
 }
 
 export function locale(): string { return actual.locale }
 
-/** 1800000 -> '1.800.000' en Colombia, '1,800,000' en Estados Unidos */
-export function numero(v: unknown, decimales = actual.decimales): string {
+function decimalesDe(moneda: string | null | undefined): number {
+  return DECIMALES[(moneda ?? 'COP').toUpperCase()] ?? 0
+}
+
+/**
+ * 1800000 -> '1.800.000' en Colombia, '1,800,000' en Estados Unidos.
+ * El segundo parametro son DECIMALES (no la moneda): asi lo usan las 12 llamadas
+ * que ya existen en las vistas.
+ */
+export function numero(v: unknown, decimales = 0): string {
   const n = Number(v ?? 0)
   if (!Number.isFinite(n)) return '0'
   return n.toLocaleString(actual.locale, {
@@ -68,13 +80,14 @@ export function numero(v: unknown, decimales = actual.decimales): string {
   })
 }
 
-/** 1800000 en Colombia -> '$1.800.000'; en Estados Unidos -> '$1,800,000.00'. */
+/**
+ * 1800000 en pesos -> '$1.800.000' en Colombia, '$1,800,000' en Estados Unidos.
+ *
+ * El numero conserva SU VALOR y solo cambia como se escribe. El simbolo y los
+ * decimales vienen de la moneda, nunca del pais.
+ */
 export function dinero(v: unknown, moneda?: string | null, decimales?: number): string {
-  // El parametro `moneda` se sigue aceptando por compatibilidad con las llamadas
-  // viejas, pero el simbolo y los decimales los manda el PAIS: si el usuario esta
-  // en Estados Unidos y por error quedo en COP, tiene que ver dolares.
-  const d = decimales ?? (moneda ? (DECIMALES[(moneda).toUpperCase()] ?? actual.decimales)
-    : actual.decimales)
+  const d = decimales ?? decimalesDe(moneda)
   return `${simbolo(moneda)}${numero(v, d)}`
 }
 
@@ -86,7 +99,7 @@ export function dineroCorto(v: unknown, moneda?: string | null): string {
   if (abs >= 1_000_000_000) return `${signo}${simbolo(moneda)}${numero(abs / 1_000_000_000, 1)}MM`
   if (abs >= 1_000_000) return `${signo}${simbolo(moneda)}${numero(abs / 1_000_000, 1)}M`
   if (abs >= 10_000) return `${signo}${simbolo(moneda)}${numero(abs / 1000, 0)}k`
-  return `${signo}${simbolo(moneda)}${numero(abs, actual.decimales)}`
+  return `${signo}${simbolo(moneda)}${numero(abs, decimalesDe(moneda))}`
 }
 
 export function porcentaje(v: unknown, decimales = 1): string {

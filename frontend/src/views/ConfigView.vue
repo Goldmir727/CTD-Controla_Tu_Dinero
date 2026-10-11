@@ -69,6 +69,7 @@
         :class="['chip', paisEdit === p.codigo ? 'on' : '']"
         @click="elegirPais(p.codigo)"
       >{{ p.nombre }} {{ p.simbolo }}</button>
+      <p v-if="avisoMoneda" class="alert" style="flex-basis: 100%">{{ avisoMoneda }}</p>
       <button class="btn-mint" :disabled="busy.moneda || !paisEdit" @click="guardarMoneda">
         <span v-if="busy.moneda" class="spinner"></span>Guardar
       </button>
@@ -292,10 +293,12 @@ const { tema, aplicar: setTema } = useTema()
 const semana = ref(localStorage.getItem('ctd-semana') || 'Lunes')
 const nombreEdit = ref('')
 const paisEdit = ref('CO')
+const avisoMoneda = ref('')
 const catalogoPaises = ref<{ codigo: string; nombre: string; moneda: string; simbolo: string }[]>([])
 const paisNombre = computed(() => me.value.pais_nombre || me.value.pais || 'Colombia')
 function elegirPais(cod: string) {
   paisEdit.value = cod
+  avisoMoneda.value = ''
   // El formato se cambia de una, para que el usuario vea el efecto antes de
   // guardar y no se entere al salir de Ajustes.
   const p = catalogoPaises.value.find((x) => x.codigo === cod)
@@ -310,8 +313,8 @@ const ncat = reactive({ nombre: '', tipo: 'gasto' })
 const nmet = ref('')
 const impModo = ref('agregar')
 const busy = reactive({ perfil: false, moneda: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
-const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '' })
-const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', twofa: '', reset: '' })
+const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '' })
+const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', twofa: '', reset: '' })
 // El boton se deshabilita si no eres PRO, pero el usuario tiene que poder LEER
 // por que esta bloqueado: un boton muerto sin explicacion parece un error.
 const esPro = ref(false)
@@ -375,11 +378,13 @@ async function quitarFoto() {
 async function guardarMoneda() {
   busy.moneda = true
   try {
-    const { data } = await api.patch('/auth/me', { pais: paisEdit.value })
+const { data } = await api.patch('/auth/me', { pais: paisEdit.value })
     me.value = data
     paisEdit.value = data.pais
-    // El formato se reaplica con lo que devolvio el servidor, no con lo que el
-    // cliente suponia: la moneda pudo cambiar sola al cambiar el pais.
+    // El backend avisa cuando el pais y la moneda no coinciden. Sus cifras
+    // siguen siendo las mismas: la app cambia el formato, nunca el valor.
+    avisoMoneda.value = data.aviso_moneda || ''
+    msg.moneda = data.aviso_moneda ? '' : 'Listo.'
     configurarFormato(data.pais, data.moneda)
   }
   finally { busy.moneda = false }

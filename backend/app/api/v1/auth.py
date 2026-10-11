@@ -135,16 +135,25 @@ def patch_me(data: UserPatch, db: Session = Depends(get_db), user: User = Depend
         if not _paises.existe(cod):
             raise HTTPException(422, "Ese país no está en la lista")
         user.pais = cod
-            # La moneda sigue al pais si el usuario no dijo otra cosa. Elegir
-            # Mexico y que la app siga formateando en pesos colombianos seria
-            # peor que no haber ofrecido la opcion.
-        if "moneda" not in patch:
-            user.moneda = _paises.moneda_de(cod)
+        # NO se toca la moneda aqui. Este es el bug que casi se manda: al cambiar
+        # de pais se pasaba la moneda sola y un usuario con 1.800.000 pesos
+        # terminaba viendo 1.800.000 dolares. El pais cambia COMO se escribe el
+        # numero; la moneda es lo que el numero SIGNIFICA, y esa solo la cambia
+        # el usuario a proposito.
+        if "moneda" not in patch and user.moneda != _paises.moneda_de(cod):
+            patch["_aviso"] = (
+                f"Tu país usa {_paises.moneda_de(cod)}, pero tus cifras siguen en "
+                f"{user.moneda}. La app no convierte entre monedas: tus "
+                f"{user.moneda} siguen siendo {user.moneda}, solo se muestran con "
+                f"otro formato."
+            )
     for k, v in patch.items():
+        if k == "_aviso":
+            continue
         setattr(user, k, v)
     db.commit()
     db.refresh(user)
-    return user_out(user)
+    return user_out(user, patch.get("_aviso"))
 
 
 @router.post("/auth/logout")

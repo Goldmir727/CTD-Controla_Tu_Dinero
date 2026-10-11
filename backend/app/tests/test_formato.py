@@ -53,10 +53,10 @@ def test_dinero_usa_el_simbolo_de_la_moneda_del_usuario():
     # El bug original: el simbolo estaba fijo en "$" en toda la app, asi que un
     # usuario EUR veia "$1.234,50".
     assert dinero(1800000, "COP") == "$1.800.000"
-    assert dinero(1800000, "USD") == "$1.800.000"
-    assert dinero(1800000, "MXN") == "$1.800.000"
-    assert dinero(1234.5, "EUR") == "\u20ac1.234,50"
-    assert simbolo_moneda("EUR") == "\u20ac"
+    assert dinero(1800000, "USD") == "$1.800.000,00"
+    assert dinero(1800000, "MXN") == "$1.800.000,00"
+    assert dinero(1234.5, "EUR") == "€1.234,50"
+    assert simbolo_moneda("EUR") == "€"
     assert simbolo_moneda("desconocida") == "$"  # no revienta con una moneda rara
 
 

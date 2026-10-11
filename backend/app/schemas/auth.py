@@ -110,12 +110,21 @@ class UserOut(BaseModel):
     # Plan comercial: "free" | "pro" (ya vencido se reporta como "free").
     plan: str = "free"
     simbolo_moneda: str = "$"
+    # El pais define COMO se escribe el numero (separadores, idioma, quincena).
+    # La MONEDA es la unidad y no se toca sola: ver el aviso de abajo.
+    pais: str = "CO"
+    pais_nombre: str = "Colombia"
+    usa_quincena: bool = True
+    locale: str = "es-CO"
+    # Aparece cuando el pais del usuario no usa su moneda. La app no convierte:
+    # 1.800.000 pesos siguen siendo 1.800.000 pesos aunque el pais sea otro.
+    aviso_moneda: str | None = None
     # Que puede usar este usuario, para que el front no adivine reglas.
     capacidades: dict[str, bool] = Field(default_factory=dict)
     asesor_consultas_dia: int = 5
 
 
-def user_out(user) -> UserOut:
+def user_out(user, aviso: str | None = None) -> UserOut:
     from app.core.plan import config_plan, plan_efectivo
     from app.core.legal import DATOS_VERSION, TERMINOS_VERSION
     from app.services import paises
@@ -132,9 +141,10 @@ def user_out(user) -> UserOut:
                    acepta_datos=(user.acepta_datos_at is not None
                                  and user.datos_version == DATOS_VERSION),
                    plan=plan_efectivo(user),
-                   simbolo_moneda=paises.simbolo_de(user.pais, user.moneda),
+                   simbolo_moneda=simbolo_moneda(user.moneda),
     pais=(user.pais or paises.DEFAULT),
     pais_nombre=paises.nombre(user.pais),
+    aviso_moneda=aviso,
     usa_quincena=paises.usa_quincena(user.pais),
     locale=paises.locale_de(user.pais, user.moneda),
                    capacidades={k: bool(v) for k, v in cfg.items() if isinstance(v, bool)},
