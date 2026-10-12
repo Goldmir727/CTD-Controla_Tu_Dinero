@@ -179,21 +179,27 @@ def confirmar(data: CapturaConfirmarIn, db: Session = Depends(get_db),
 
             # "Es distinto": se crea un fijo NUEVO con este movimiento, para que el
             # motor lo cuente aparte del que ya existe.
-            if m.nuevo_fijo and m.tipo == "gasto":
+            # Antes esto solo corria para gastos: un ingreso fijo (el sueldo, una
+            # mesada) NO se creaba nunca, y `usa_quincena` hacia que el motor lo
+            #hevara. Ahora vale para los dos tipos, que es lo coherente con que
+            # Plan tambien acepte ingresos fijos.
+            if m.nuevo_fijo:
                 nombre_fijo = (m.descripcion or cat.nombre)[:120]
                 ya = db.query(Recurring).filter_by(perfil_id=perfil.id, nombre=nombre_fijo,
-                                                    dia=fecha.day, activo=True).first()
+                                                    dia=fecha.day, tipo=m.tipo,
+                                                    activo=True).first()
                 if not ya:
                     db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
-                                     nombre=nombre_fijo, tipo="gasto", monto=m.monto,
+                                     nombre=nombre_fijo, tipo=m.tipo, monto=m.monto,
                                      dia=fecha.day, frecuencia="mensual",
                                      cuenta_id=cuenta.id, categoria_id=cat.id, activo=True,
                                      confirmado=True, nota="Creado desde la captura"))
-            elif m.fijo and m.tipo == "gasto" and not rec and not db.query(
+            elif m.fijo and not rec and not db.query(
                     Recurring).filter_by(perfil_id=perfil.id, cuenta_id=cuenta.id,
-                                       categoria_id=cat.id, activo=True).first():
+                                       categoria_id=cat.id, tipo=m.tipo,
+                                       activo=True).first():
                 db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
-                                 nombre=m.descripcion or cat.nombre, tipo="gasto",
+                                 nombre=m.descripcion or cat.nombre, tipo=m.tipo,
                                  monto=m.monto, dia=fecha.day, frecuencia="mensual",
                                  cuenta_id=cuenta.id, categoria_id=cat.id, activo=True))
         except Exception as e:  # noqa: BLE001 - se reporta por movimiento, no se cae todo

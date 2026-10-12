@@ -17,6 +17,10 @@ class User(UUIDBase):
     # quincenas. La moneda se conserva porque el usuario la elige a proposito,
     # pero el simbolo y los separadores salen del pais. Ver services/paises.py.
     pais: Mapped[str] = mapped_column(String(2), default="CO", index=True)
+    # El pais ya NO decide el periodo de la revision: eso lo elige el usuario en
+    # Ajustes y arranca en mes (False). La quincena solo se activa si te pagan
+    # asi. Ver services/periodo.py.
+    usa_quincena: Mapped[bool] = mapped_column(Boolean, default=False)
     foto_url: Mapped[str | None] = mapped_column(Text, nullable=True)  # avatar data-URL
     is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     onboarding_done: Mapped[bool] = mapped_column(Boolean, default=False)

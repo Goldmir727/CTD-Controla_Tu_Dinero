@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.goals import Goal
 from app.models.perfil import Perfil
+from app.models.user import User
 from app.services import finanzas as fin
 
 # Descripciones en espanol y en segunda persona: el modelo las lee para decidir.
@@ -246,7 +247,9 @@ def ejecutar(nombre: str, args: dict, db: Session, user_id: str, perfil_id: str,
                     f = _date.fromisoformat(str(args["fecha"]))
                 except ValueError:
                     return {"error": "fecha inválida; usa YYYY-MM-DD"}
-            return _redondear(_revision(db, user_id, perfil_id, f))
+            _u = db.get(User, user_id)
+            return _redondear(_revision(db, user_id, perfil_id, f,
+                                        usa_quincena=bool(_u.usa_quincena) if _u else False))
 
         if nombre == "riesgo_mezcla":
             # Solo tiene sentido si el usuario tiene un Negocio. Sin el, el

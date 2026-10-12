@@ -161,13 +161,17 @@ def informe_mensual(db, usuario, perfil, mes: str | None = None) -> tuple[bytes,
     S.append(Paragraph("Dónde estás hoy", e["h"]))
     from app.services import quincena as qn
 
-    rev = qn.revision(db, usuario.id, perfil.id, date.today())
+    usa_q = bool(getattr(usuario, "usa_quincena", False))
+    rev = qn.revision(db, usuario.id, perfil.id, date.today(), usa_quincena=usa_q)
     S.append(Paragraph(rev["mensaje"], e["caja"]))
     S.append(Spacer(1, 6))
-    rev_lineas = [["Quincena", rev["etiqueta_legible"]],
-                  ["Día de la quincena", f"{rev['quincena']['dias_transcurridos']} de "
+    # Los rotulos siguen al periodo del usuario: poner "Quincena" a quien razona
+    # por mes le estaria enseñando un concepto que no esta usando.
+    nombre_periodo = "Quincena" if usa_q else "Mes"
+    rev_lineas = [[nombre_periodo, rev["etiqueta_legible"]],
+                  [f"Día del {nombre_periodo.lower()}", f"{rev['quincena']['dias_transcurridos']} de "
                                          f"{rev['quincena']['dias_totales']}"],
-                  ["Gastado en la quincena", _dinero(rev["movimientos"]["gastos"])],
+                  [f"Gastado en la {nombre_periodo.lower()}", _dinero(rev["movimientos"]["gastos"])],
                   ["Fijos que vencen", _dinero(rev["fijos"]["gastos"])],
                   ["Cierre estimado", _dinero(rev["proyeccion"]["saldo_al_cerrar"])]]
     tabla_rev = [[Paragraph(str(c), e["caja"]) for c in rev_lineas[0]]] + \

@@ -43,10 +43,14 @@ class RefreshIn(BaseModel):
 class UserPatch(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=120)
     moneda: str | None = Field(default=None, pattern="^(COP|USD|MXN|EUR)$")
-    # Cambiar el pais cambia el formato entero y, si el pais usa quincena, la
-    # forma de razonar de la app. La moneda se ajusta sola para que no queden
-    # las dos cosas en contra: elegir Mexico y que siga diciendo COP no sirve.
+    # Cambiar el pais cambia el formato entero. La moneda se ajusta sola para que
+    # no queden las dos cosas en contra: elegir Mexico y que siga diciendo COP no
+    # sirve.
     pais: str | None = Field(default=None, min_length=2, max_length=2)
+    # El periodo de la revision ya NO sale del pais: lo elige el usuario en
+    # Ajustes, y False (mes) es el default porque la app habla para cualquiera,
+    # no solo para quien cobra por quincena.
+    usa_quincena: bool | None = None
     foto_url: str | None = None
 
 
@@ -110,11 +114,12 @@ class UserOut(BaseModel):
     # Plan comercial: "free" | "pro" (ya vencido se reporta como "free").
     plan: str = "free"
     simbolo_moneda: str = "$"
-    # El pais define COMO se escribe el numero (separadores, idioma, quincena).
-    # La MONEDA es la unidad y no se toca sola: ver el aviso de abajo.
+    # El pais define COMO se escribe el numero (separadores, idioma). El periodo
+    # de la revision ya NO lo decide el pais: lo elige el usuario en Ajustes y
+    # arranca en mes. Ver services/periodo.py.
     pais: str = "CO"
     pais_nombre: str = "Colombia"
-    usa_quincena: bool = True
+    usa_quincena: bool = False
     locale: str = "es-CO"
     # Aparece cuando el pais del usuario no usa su moneda. La app no convierte:
     # 1.800.000 pesos siguen siendo 1.800.000 pesos aunque el pais sea otro.
@@ -145,7 +150,7 @@ def user_out(user, aviso: str | None = None) -> UserOut:
     pais=(user.pais or paises.DEFAULT),
     pais_nombre=paises.nombre(user.pais),
     aviso_moneda=aviso,
-    usa_quincena=paises.usa_quincena(user.pais),
+    usa_quincena=bool(user.usa_quincena),
     locale=paises.locale_de(user.pais, user.moneda),
                    capacidades={k: bool(v) for k, v in cfg.items() if isinstance(v, bool)},
                    asesor_consultas_dia=int(cfg["asesor_dia"]))

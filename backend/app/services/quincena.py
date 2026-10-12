@@ -24,6 +24,7 @@ from app.models.finance import Budget, Category, Transaction
 from app.models.goals import Recurring
 from app.services import colombia as co
 from app.services import finanzas as fin
+from app.services import periodo as per
 # Los mensajes van al chat y al PDF: si usan el formato ingles ("1,301,667") el
 # usuario lee otra cifra que la de la tabla de al lado ("$1.301.667").
 from app.services.formato import dinero
@@ -56,8 +57,13 @@ def _ocurrencias_en_quincena(dia: int, frecuencia: str, dia_inicio: int, dia_fin
     return total
 
 
-def fijos_de_la_quincena(db: Session, user_id: str, perfil_id: str, q: dict) -> dict:
-    """Cuanto fijo vence en esta quincena, y el detalle de que es."""
+def fijos_del_periodo(db: Session, user_id: str, perfil_id: str, q: dict) -> dict:
+    """Cuanto fijo vence en este periodo, y el detalle de que es.
+
+    Sirve igual para mes y para quincena: se lee el rango real del periodo, asi
+    que un arriendo el dia 20 cuenta en el mes (una vez) y en la segunda quincena
+    (una vez), no se inventa el "si es mensual, una vez".
+    """
     dia_inicio = int(q["inicio"][-2:])
     dia_fin = int(q["fin"][-2:])
     filas = db.query(Recurring).filter_by(user_id=user_id, perfil_id=perfil_id, activo=True).all()
@@ -76,7 +82,11 @@ def fijos_de_la_quincena(db: Session, user_id: str, perfil_id: str, q: dict) -> 
             "gastos": round(sum(x["monto"] for x in detalle if x["tipo"] == "gasto"), 2)}
 
 
-def gastado_quincena(db: Session, user_id: str, perfil_id: str, desde: str, hasta: str) -> dict:
+# Alias para los llamadores viejos.
+fijos_de_la_quincena = fijos_del_periodo
+
+
+def gastado_periodo(db: Session, user_id: str, perfil_id: str, desde: str, hasta: str) -> dict:
     fila = db.query(
         func.sum(case((Transaction.tipo == "ingreso", Transaction.monto), else_=0)),
         func.sum(case((Transaction.tipo == "gasto", Transaction.monto), else_=0)),
@@ -88,14 +98,24 @@ def gastado_quincena(db: Session, user_id: str, perfil_id: str, desde: str, hast
             "balance": round(ing - gas, 2), "movimientos": n}
 
 
-def revision(db: Session, user_id: str, perfil_id: str, fecha: date | None = None) -> dict:
-    """Estado de la quincena en curso + proyeccion a su cierre."""
+# Alias para los llamadores viejos.
+gastado_quincena = gastado_periodo
+
+
+def revision(db: Session, user_id: str, perfil_id: str, fecha: date | None = None,
+             usa_quincena: bool = True) -> dict:
+    """Estado del periodo en curso + proyeccion a su cierre.
+
+    ``usa_quincena`` decide el corte: False = mes completo (dia 1 al ultimo),
+    True = quincena. El default True es solo para no romper los llamadores
+    antiguos; la API siempre pasa el valor del usuario.
+    """
     hoy = fecha or date.today()
-    q = co.quincena(hoy)
+    q = per.periodo(hoy, usa_quincena)
     desde, hasta = q["inicio"], q["fin"]
 
-    movs = gastado_quincena(db, user_id, perfil_id, desde, hasta)
-    fijos = fijos_de_la_quincena(db, user_id, perfil_id, q)
+    movs = gastado_periodo(db, user_id, perfil_id, desde, hasta)
+    fijos = fijos_del_periodo(db, user_id, perfil_id, q)
     disp = fin.disponible(db, user_id, perfil_id)
 
     # Proyeccion: lo que ya gasto + lo que falta por gastar a ritmo normal.
@@ -107,10 +127,9 @@ def revision(db: Session, user_id: str, perfil_id: str, fecha: date | None = Non
     variables_esperados = round(variables["promedio_variables"] * (1 - fraccion), 2)
     cierre_estimado = round(disp["total"] + movs["balance"] - fijos_esperados - variables_esperados, 2)
 
-    # Comparacion con la misma quincena del mes anterior: es lo unico comparable,
-    # porque un mes puede tener 1 o 2 quincenas dePrimero y Segundo.
-    etiqueta_anterior = _quincena_anterior(q)
-    anterior = _comparar(db, user_id, perfil_id, etiqueta_anterior)
+    # Comparacion con el mismo periodo del mes anterior.
+    anterior_q = per.periodo_anterior(q, usa_quincena)
+    anterior = _comparar(db, user_id, perfil_id, anterior_q, usa_quincena)
 
     alertas = alertas_presupuesto(db, user_id, perfil_id, hoy)
 
@@ -119,7 +138,8 @@ def revision(db: Session, user_id: str, perfil_id: str, fecha: date | None = Non
 
     return {
         "quincena": q,
-        "etiqueta_legible": co.etiqueta_quincena(q["etiqueta"]),
+        "usa_quincena": usa_quincena,
+        "etiqueta_legible": per.etiqueta_periodo(q["etiqueta"], usa_quincena),
         "hoy": hoy.isoformat(),
         "movimientos": movs,
         "fijos": fijos,
@@ -135,33 +155,23 @@ def revision(db: Session, user_id: str, perfil_id: str, fecha: date | None = Non
         },
         "comparacion": anterior,
         "alertas": alertas,
-        "mensaje": _mensaje(q, movs, cierre_estimado, alertas, libre),
+        "mensaje": _mensaje(q, movs, cierre_estimado, alertas, libre, usa_quincena),
     }
 
 
 def _quincena_anterior(q: dict) -> dict | None:
-    """La misma quincena (primera o segunda) del mes anterior.
-
-    Ojo aqui: hay que conservar el numero de quincena. Comparar la segunda contra
-    la primera daria siempre "gastaste menos", porque la segunda quincena siempre
-    tiene menos dias y menos movimiento. Seria un numero cierto sobre una
-    comparacion falsa.
-    """
-    f_ini = date.fromisoformat(q["inicio"])
-    ultimo_dia_mes_anterior = f_ini.replace(day=1) - timedelta(days=1)
-    # Mismo numero de quincena: 1 -> dia 1, 2 -> dia 16.
-    dia_equivalente = 1 if q["numero"] == 1 else 16
-    return co.quincena(date(ultimo_dia_mes_anterior.year, ultimo_dia_mes_anterior.month,
-                            dia_equivalente))
+    """Compat: la misma quincena del mes anterior. Ahora vive en services/periodo."""
+    return per.periodo_anterior(q, usa_quincena=True)
 
 
-def _comparar(db: Session, user_id: str, perfil_id: str, etiqueta_anterior: dict | None) -> dict | None:
+def _comparar(db: Session, user_id: str, perfil_id: str,
+              etiqueta_anterior: dict | None, usa_quincena: bool = True) -> dict | None:
     if not etiqueta_anterior:
         return None
-    previo = gastado_quincena(db, user_id, perfil_id, etiqueta_anterior["inicio"],
-                               etiqueta_anterior["fin"])
+    previo = gastado_periodo(db, user_id, perfil_id, etiqueta_anterior["inicio"],
+                              etiqueta_anterior["fin"])
     return {"etiqueta": etiqueta_anterior["etiqueta"],
-            "legible": co.etiqueta_quincena(etiqueta_anterior["etiqueta"]),
+            "legible": per.etiqueta_periodo(etiqueta_anterior["etiqueta"], usa_quincena),
             "gastos": previo["gastos"], "ingresos": previo["ingresos"],
             "balance": previo["balance"]}
 
@@ -235,18 +245,28 @@ def _mensaje_presupuesto(nombre: str, pct: float, dia: int, ultimo: int,
             f"un poco más rápido de lo normal.")
 
 
-def _mensaje(q: dict, movs: dict, cierre: float, alertas: list, libre: float) -> str:
-    # "la primera quincena": etiqueta_quincena devuelve sin artículo porque también
-    # se usa suelta en la UI, y "Vas con primera quincena" suena a frase rota.
-    etiqueta = co.etiqueta_quincena(q["etiqueta"])
+def _mensaje(q: dict, movs: dict, cierre: float, alertas: list, libre: float,
+             usa_quincena: bool = True) -> str:
+    # En quincena el texto necesita articulo ("Vas con la primera quincena"); en
+    # mes la etiqueta completa ("octubre de 2026") suena a tema dentro de la
+    # frase, asi que adentro se usa "este mes" y la etiqueta queda para el
+    # encabezado de la tarjeta.
+    if usa_quincena:
+        etiqueta = co.etiqueta_quincena(q["etiqueta"])
+        vacio = "Todavía no has registrado nada en esta quincena."
+        bien = f"Vas con la {etiqueta} y, a este ritmo, cerrarías con {dinero(cierre)}."
+        mal = f"Ojo: a este ritmo la {etiqueta} cerraría en {dinero(cierre)}."
+    else:
+        vacio = "Todavía no has registrado nada este mes."
+        bien = f"Este mes vas bien: a este ritmo cerrarías con {dinero(cierre)}."
+        mal = f"Ojo: a este ritmo, este mes cerrarías en {dinero(cierre)}."
     partes = []
     if movs["gastos"] == 0 and movs["ingresos"] == 0:
-        partes.append("Todavía no has registrado nada en esta quincena.")
+        partes.append(vacio)
     elif cierre >= 0:
-        partes.append(f"Vas con la {etiqueta} y, a este ritmo, "
-                      f"cerrarías con {dinero(cierre)}.")
+        partes.append(bien)
     else:
-        partes.append(f"Ojo: a este ritmo la {etiqueta} cerraría en {dinero(cierre)}.")
+        partes.append(mal)
     if alertas:
         partes.append(f"Tienes {len(alertas)} "
                       + ("presupuesto" if len(alertas) == 1 else "presupuestos")

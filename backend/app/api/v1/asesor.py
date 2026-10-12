@@ -69,12 +69,12 @@ def uso_asesor(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 @router.get("/asesor/revision")
 def revision(db: Session = Depends(get_db), user: User = Depends(get_current_user),
-             perfil: Perfil = Depends(get_perfil), fecha: str | None = None):
-    """Como vas en la quincena y que se viene encima.
+perfil: Perfil = Depends(get_perfil), fecha: str | None = None):
+    """Como vas en el periodo y que se viene encima.
 
-    Sin push ni cron: se calcula al abrir la app. Por que es suficiente: la
-    quincena dura 15 dias y el usuario abre la app varias veces al dia, asi que la
-    informacion esta lista cuando se necesita, sin infraestructura de recordatorios.
+    Sin push ni cron: se calcula al abrir la app. Por que es suficiente: el
+    periodo dura semanas y el usuario abre la app varias veces al dia, asi que la
+    informacion esta lista cuando se necesita, sin recordatorios.
     """
     from app.services.quincena import revision as revisar
 
@@ -84,7 +84,7 @@ def revision(db: Session = Depends(get_db), user: User = Depends(get_current_use
             f = date.fromisoformat(fecha)
         except ValueError:
             raise HTTPException(422, "fecha debe ser YYYY-MM-DD")
-    return revisar(db, user.id, perfil.id, f)
+    return revisar(db, user.id, perfil.id, f, usa_quincena=user.usa_quincena)
 
 
 @router.post("/asesor/chat", dependencies=[Depends(asesor_limit)])
