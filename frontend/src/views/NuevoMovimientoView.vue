@@ -2,7 +2,10 @@
   <main class="page">
     <h2>Nuevo movimiento</h2>
     <form @submit.prevent="guardar" style="display: grid; gap: 12px">
-      <select v-model="form.tipo" class="input"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option></select>
+      <div class="tipo-switch" role="group" aria-label="Tipo de movimiento">
+        <button type="button" :class="['chip', form.tipo === 'gasto' ? 'on' : '']" @click="form.tipo = 'gasto'">Gasto</button>
+        <button type="button" :class="['chip', form.tipo === 'ingreso' ? 'on' : '']" @click="form.tipo = 'ingreso'">Ingreso</button>
+      </div>
       <NumeroInput v-model="form.monto" placeholder="Monto (ej: 100.000)" required />
       <input v-model="form.descripcion" placeholder="Descripción" class="input" />
       <select v-model="form.cuenta_id" class="input" required>
@@ -24,17 +27,39 @@
   </main>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const error = ref('')
 const cuentas = ref<{ id: string; nombre: string }[]>([])
 const categorias = ref<{ id: string; nombre: string; tipo: string }[]>([])
 const metodos = ref<{ id: string; nombre: string }[]>([])
 const form = reactive({ tipo: 'gasto', monto: null as number | null, descripcion: '', fecha: new Date().toISOString().slice(0, 10), cuenta_id: '', categoria_id: '', metodo_id: '' })
+
+/**
+ * El menu del boton flotante abre esta vista con ?tipo=ingreso o ?tipo=gasto,
+ * pero el tipo estaba fijo en 'gasto' y la query nunca se leia: al elegir
+ * "+ Ingreso" el formulario ofrecia "Gasto" y habia que cambiarlo a mano.
+ */
+onMounted(() => {
+  if (route.query.tipo === 'ingreso' || route.query.tipo === 'gasto') form.tipo = route.query.tipo
+})
+
+/**
+ * Las categorias se filtran por tipo, asi que al cambiar de Gasto a Ingreso la
+ * categoria elegida puede dejar de existir en la lista. Sin limpiarla se
+ * mandaba un id de gasto dentro de un ingreso.
+ */
+watch(() => form.tipo, () => {
+  const sigueValida = categorias.value.some(
+    (c) => c.id === form.categoria_id && (c.tipo === form.tipo || c.tipo === 'ambos'),
+  )
+  if (!sigueValida) form.categoria_id = ''
+})
 
 const categoriasFiltradas = computed(() =>
   categorias.value.filter((c) => c.tipo === form.tipo || c.tipo === 'ambos')
@@ -72,3 +97,9 @@ async function guardar() {
   finally { loading.value = false }
 }
 </script>
+<style scoped>
+/* Mismo control en dos toques que en Movs y Plan, en vez de un desplegable con
+   dos opciones que ademas salia con el valor equivocado. */
+.tipo-switch { display: flex; gap: 8px; }
+.tipo-switch .chip { flex: 1; }
+</style>
