@@ -3,7 +3,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center">
       <h2 style="margin: 0">Movimientos</h2>
     </div>
-    <p class="eyebrow">{{ mes }}</p>
+    <p class="eyebrow">{{ mes }} <span class="unidad">cifras en {{ cod }}</span></p>
     <div style="display: flex; gap: 8px; margin: 10px 0">
       <button v-for="f in ['todos', 'ingreso', 'gasto']" :key="f" :class="['chip', filtro === f ? 'on' : '']" @click="filtro = f">{{ label(f) }}</button>
     </div>
@@ -72,10 +72,14 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
-import { numero } from '../utils/formato'
+import { codigo, numero } from '../utils/formato'
 type Mov = { id: string; tipo: string; monto: number; fecha: string; descripcion: string; categoria_id?: string; cuenta_id?: string; metodo_id?: string | null; categoria?: string; cuenta?: string }
 const filtro = ref('todos'); const q = ref(''); const mes = ref(new Date().toISOString().slice(0, 7))
-const items = ref<Mov[]>([]); const cuentas = ref<{ id: string; nombre: string }[]>([]); const categorias = ref<{ id: string; nombre: string; tipo: string }[]>([])
+const items = ref<Mov[]>([])
+// La moneda es la del usuario, no una suposicion: si esta en USD, el selector
+// de cuenta y metodo ya muestran simbolos distintos y el codigo debe acorde.
+const moneda = ref('COP')
+const cod = computed(() => codigo(moneda.value)); const cuentas = ref<{ id: string; nombre: string }[]>([]); const categorias = ref<{ id: string; nombre: string; tipo: string }[]>([])
 const metodos = ref<{ id: string; nombre: string }[]>([])
 const sheet = ref(false); const cuentaId = ref(''); const categoriaId = ref(''); const orden = ref('recientes')
 const loading = ref(true)
@@ -158,6 +162,7 @@ onMounted(async () => {
     api.get('/metodos-pago').catch(() => ({ data: [] }))
   ])
   cuentas.value = cu.data; categorias.value = ca.data; metodos.value = me.data
+  api.get('/auth/me').then(({ data }) => { moneda.value = data.moneda ?? 'COP' }).catch(() => {})
   await cargar()
 })
 watch([filtro, cuentaId, categoriaId, orden], cargar)
@@ -169,6 +174,7 @@ watch(q, () => { clearTimeout(t); t = setTimeout(cargar, 350) })
 .chip { border: 1px solid var(--navy); background: var(--surface); color: var(--navy); border-radius: 99px; padding: 8px 14px; font-weight: 700; }
 .chip.on { background: var(--navy); color: #fff; }
 .link { background: none; border: 0; color: var(--ink-soft); margin-top: 8px; }
+.unidad { opacity: .65; font-weight: 600; }
 .row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
 .btn-new { background: var(--mint); color: var(--navy); border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 800; }
 .sheet-back { position: fixed; inset: 0; background: rgba(5,11,59,.45); z-index: 30; display: flex; align-items: flex-end; }

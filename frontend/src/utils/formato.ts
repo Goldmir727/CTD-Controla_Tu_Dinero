@@ -102,6 +102,26 @@ export function dineroCorto(v: unknown, moneda?: string | null): string {
   return `${signo}${simbolo(moneda)}${numero(abs, decimalesDe(moneda))}`
 }
 
+/**
+ * Codigo ISO de la moneda: "COP", "USD", "EUR"...
+ *
+ * Por que hace falta: el simbolo no alcanza. COP, USD, MXN, ARS y CLP comparten
+ * "$", y ademas cambiar de pais reescribe 1.800.000 como "$1,800,000", que se
+ * lee como un millón ochocientos mil DOLARES aunque sean pesos. El codigo es lo
+ * unico que no se puede confundir.
+ *
+ * No se pone en cada numero: seria ruido. Va en las cifras grandes, que son las
+ * que el usuario lee de verdad.
+ */
+export function codigo(moneda: string | null | undefined): string {
+  return (moneda ?? 'COP').toUpperCase()
+}
+
+/** Dinero con su unidad explicita, para las cifras que el usuario mira de frente. */
+export function dineroConUnidad(v: unknown, moneda?: string | null, decimales?: number): string {
+  return `${dinero(v, moneda, decimales)} ${codigo(moneda)}`
+}
+
 export function porcentaje(v: unknown, decimales = 1): string {
   return `${numero(v, decimales)}%`
 }

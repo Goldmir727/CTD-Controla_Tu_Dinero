@@ -144,9 +144,26 @@ def test_la_moneda_no_depende_del_pais_en_los_datos():
     from app.services.formato import MONEDAS
 
     # Todas las monedas del catalogo existen en MONEDAS con simbolo y decimales:
-    # si alguien agrega un pais con una moneda que no esta, se rompe en silencio.
+    # si alguien agrega un pais con una moneda que no esta, se rompe alli en vez
+    # de fallar en silencio.
     for cod in paises.PAISES:
         m = paises.PAISES[cod]["moneda"]
         assert m in MONEDAS, f"{cod} usa {m} y no esta en MONEDAS"
         assert MONEDAS[m]["simbolo"] == paises.PAISES[cod]["simbolo"], (
             f"{m} tiene simbolo distinto en MONEDAS que en el catalogo de paises")
+
+
+def test_el_codigo_iso_es_la_unica_manera_de_saber_la_unidad():
+    """El simbolo no dice nada: cinco monedas comparten "$".
+
+    Por eso la app muestra "COP" al lado de las cifras grandes. Con solo "$", un
+    "$1,800,000" escrito con comas se lee como dolares aunque sean pesos.
+    """
+    simbolos = {paises.simbolo_de(c) for c in paises.PAISES}
+    monedas = {paises.moneda_de(c) for c in paises.PAISES}
+    # Cinco paises distintos, un solo simbolo: no hay forma de saber la unidad
+    # mirando el "$".
+    assert len(monedas) > len(simbolos)
+    # Y los codigos ISO si son distintos por pais con la misma moneda.
+    assert paises.moneda_de("CO") == "COP"
+    assert paises.moneda_de("US") == "USD"

@@ -3,7 +3,7 @@
     <p class="eyebrow">{{ saludo }}, {{ nombre }}</p>
     <section class="card-featured" style="margin: 12px 0 16px">
       <div class="eyebrow" style="color: #B9C2E0">DISPONIBLE</div>
-      <div class="big-number">${{ fmt(disponible) }}</div>
+      <div class="big-number">{{ fmt(disponible) }} <span class="unidad">{{ cod }}</span></div>
       <div class="delta" v-if="tasa !== null"><i :class="['bi', tasa >= 0 ? 'bi-arrow-up' : 'bi-arrow-down']"></i> {{ Math.abs(tasa) }}% este mes</div>
       <span class="glow-line"></span>
     </section>
@@ -32,6 +32,17 @@
       <button class="btn-mint" @click="$router.push('/config')">Revisar perfiles</button>
     </section>
 
+    <section v-if="avisoMoneda" class="card aviso-moneda">
+      <i class="bi bi-cash-coin"></i>
+      <div>
+        <strong>Todas tus cifras están en {{ moneda }}.</strong>
+        <p class="sub">
+          {{ avisoMoneda }}
+          <button class="link" @click="$router.push('/config')">Cambiar</button>
+        </p>
+      </div>
+    </section>
+
     <section v-if="revision" class="card revision" data-tour="quincena">
       <div class="revision-cab">
         <div>
@@ -43,7 +54,8 @@
         <div class="revision-saldo">
           <div class="eyebrow">CIERRA EN</div>
           <strong :class="revision.proyeccion.saldo_al_cerrar >= 0 ? 'pos' : 'neg'">
-            {{ revision.proyeccion.saldo_al_cerrar >= 0 ? '+' : '−' }}${{ fmt(Math.abs(revision.proyeccion.saldo_al_cerrar)) }}
+            {{ revision.proyeccion.saldo_al_cerrar >= 0 ? '+' : '−' }}{{ fmt(Math.abs(revision.proyeccion.saldo_al_cerrar)) }}
+            <span class="unidad">{{ cod }}</span>
           </strong>
         </div>
       </div>
@@ -127,7 +139,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import api from '../services/api'
-import { dinero, numero } from '../utils/formato'
+import { codigo, dinero, numero } from '../utils/formato'
 const nombre = ref('')
 const disponible = ref(0)
 const ingresos = ref(0); const gastos = ref(0); const balance = ref(0)
@@ -150,6 +162,10 @@ const mezcla = ref<Mezcla | null>(null)
 // personal, el aviso no aparecería nunca y el código sobraría.
 const negocioId = ref<string | null>(null)
 const moneda = ref('COP')
+const cod = computed(() => codigo(moneda.value))
+// El backend avisa cuando el pais no usa la moneda del usuario: es justo cuando
+// un numero se puede leer como dinero que el usuario no tiene.
+const avisoMoneda = ref('')
 
 type AlertaRitmo = {
   categoria: string
@@ -187,6 +203,7 @@ onMounted(async () => {
   if (me) {
     nombre.value = me.data.nombre?.split(' ')[0] ?? ''
     moneda.value = me.data.moneda ?? 'COP'
+    avisoMoneda.value = me.data.aviso_moneda ?? ''
   }
   if (cuentas) disponible.value = cuentas.data.reduce((a: number, c: { saldo_actual: number }) => a + Number(c.saldo_actual), 0)
   if (resumen) { ingresos.value = resumen.data.ingresos; gastos.value = resumen.data.gastos; balance.value = resumen.data.balance_mes; tasa.value = resumen.data.tasa_ahorro }
@@ -230,6 +247,11 @@ onMounted(async () => {
 .alerta-ritmo p { margin: 0; font-size: 13px; line-height: 1.45; }
 .revision-comp { margin-top: 12px; }
 .revision-nota { margin-top: 8px; font-size: 11.5px; opacity: .75; }
+.unidad { font-size: .52em; font-weight: 700; opacity: .6; letter-spacing: .04em; }
 .pos { color: var(--mint); }
 .neg { color: var(--danger); }
+.aviso-moneda { display: flex; gap: 10px; align-items: flex-start; border-left: 3px solid var(--warning); background: rgba(216, 154, 39, .07); }
+.aviso-moneda > i { font-size: 20px; color: var(--warning); margin-top: 1px; flex: none; }
+.aviso-moneda p { margin: 4px 0 0; }
+.aviso-moneda .link { padding: 0; font-size: 13px; text-decoration: underline; }
 </style>
