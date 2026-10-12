@@ -220,10 +220,9 @@
     <p v-if="instalarMsg" class="sub">{{ instalarMsg }}</p>
     <button class="item" @click="toggle('pwa')"><span>Estado de instalación</span><span>›</span></button>
 
-    <div class="item tour-item">
-      <span>Recorrido guiado<small>Repasa en 40 segundos todo lo que puedes hacer aquí</small></span>
-      <button v-if="tourPendiente" class="btn-new mini" @click="abrirTour">Ver</button>
-      <button class="btn-ghost mini" @click="abrirTour">Repetir</button>
+<div class="item tour-item">
+      <span class="tour-text">Recorrido guiado<small>Repasa en 40 segundos todo lo que puedes hacer aquí</small></span>
+      <button class="mini" :class="tourPendiente ? 'btn-new' : 'btn-ghost'" @click="abrirTour">{{ tourPendiente ? 'Ver' : 'Repetir' }}</button>
     </div>
     <div v-if="open === 'pwa'" class="panel">
       <div v-for="c in diag" :key="c.label" class="line">
@@ -324,7 +323,7 @@ const esPro = ref(false)
 const tourPendiente = ref(false)
 function abrirTour() { window.dispatchEvent(new CustomEvent('ctd:ver-tour')) }
 onMounted(() => {
-  try { tourPendiente.value = !JSON.parse(localStorage.getItem('ctd-tour-v3') || '{}').visto }
+  try { tourPendiente.value = !JSON.parse(localStorage.getItem('ctd-tour-v4') || '{}').visto }
   catch { tourPendiente.value = false }
 })
 const fmt = (n: number) => numero(n)
@@ -606,5 +605,8 @@ onMounted(async () => {
 .candado i{margin-top:2px;flex:none}
 .tour-item{align-items:center;cursor:default}
 .tour-item small{display:block;opacity:.65;font-size:12px;margin-top:2px}
+/* Sin min-width:0 el <span> no baja de su ancho intrinseco y el texto se
+   recorta en vez de envolver; el boton conserva su ancho con .mini{flex:none}. */
+.tour-text{min-width:0}
 .mini{padding:7px 14px;font-size:13px;flex:none}
 </style>

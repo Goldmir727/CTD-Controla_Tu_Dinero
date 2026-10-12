@@ -42,9 +42,10 @@ const pendiente = () => !visto()
 function abrir(desde = 0) {
   indice.value = desde
   abierto.value = true
+  armado.value = false
   void medir()
 }
-function cerrar() { abierto.value = false; caja.value = null }
+function cerrar() { abierto.value = false; armado.value = false; caja.value = null }
 function saltar() { marcar('omitido'); cerrar() }
 function terminar() { marcar('completado'); cerrar() }
 
@@ -67,10 +68,13 @@ function atras() {
  * "ya entendi, dejame usar la app", y por eso lo respeta sin preguntar.
  */
 const modoTutorial = ref(false)
+/** El proximo clic fuera se gasta en navegar; el siguiente ya cierra el tour. */
+const armado = ref(false)
 
 /** Click fuera = salir del tutorial, pero sin marcarlo como omitido. */
 function salirALibre() {
   modoTutorial.value = false
+  armado.value = false
   abierto.value = false
   caja.value = null
 }
@@ -79,7 +83,27 @@ function salirALibre() {
 function alNavegar() {
   if (!abierto.value) return
   modoTutorial.value = true
+  armado.value = false
   void medir()
+}
+
+/**
+ * En modo tutorial el fondo es transparente y sin pointer-events, asi que el clic
+ * del usuario llega a la app (navega) pero el backdrop NUNCA lo recibe y
+ * `salirALibre` no se dispara: el "clic fuera para salir" que prometo el pie era
+ * falso y el tour no tenia forma de cerrarse.
+ *
+ * Aqui se escucha en fase de captura y se resuelve en dos tiempos:
+ *   1.er clic -> navega, el tour continua esperando y se rearma al cambiar ruta
+ *   2.do clic -> cierra y olvida que se estaba en tutorial
+ * No se hace stopPropagation ni preventDefault: la app siempre recibe el clic.
+ */
+function alClickTutorial(e: MouseEvent) {
+  if (!abierto.value || !modoTutorial.value) return
+  const t = e.target as HTMLElement | null
+  if (t && t.closest('.tour-card')) return
+  if (!armado.value) { armado.value = true; return }
+  salirALibre()
 }
 
 /**
@@ -163,12 +187,18 @@ onMounted(() => {
   window.addEventListener('resize', recentrar)
   window.addEventListener('scroll', recentrar, true)
   window.addEventListener('keydown', alTeclado)
+  document.addEventListener('click', alClickTutorial, true)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', recentrar)
   window.removeEventListener('scroll', recentrar, true)
   window.removeEventListener('keydown', alTeclado)
+  document.removeEventListener('click', alClickTutorial, true)
 })
+
+// Antes de los watches: el getter de la linea siguiente corre de inmediato y
+// con `const props` declarado mas abajo queda en TDZ (ReferenceError).
+const props = defineProps<{ pais?: ContextoPais | null }>()
 
 watch(indice, () => void medir())
 
@@ -181,8 +211,6 @@ watch(() => props.pais, (p) => {
   if (p && p.pais) ctx.value = p
   if (abierto.value) void medir()
 }, { deep: true })
-
-const props = defineProps<{ pais?: ContextoPais | null }>()
 
 defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
 </script>
@@ -227,7 +255,7 @@ defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
       </div>
       <p class="tour-pie">
         <template v-if="modoTutorial">
-          Puedes seguir usando la app: el recorrido espera. Haz clic fuera para salir.
+          Puedes seguir usando la app: el recorrido espera. El siguiente clic fuera lo cierra.
         </template>
         <template v-else>
           También con las flechas del teclado. Esc para omitir.

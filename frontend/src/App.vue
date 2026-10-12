@@ -1,6 +1,6 @@
 <template>
   <div>
-    <header class="topbar">
+    <header class="topbar" :class="{ 'topbar--landing': isLanding && !authed }">
       <Logo :width="44" />
       <strong>CTD</strong>
       <span style="flex: 1"></span>
@@ -12,7 +12,7 @@
     <router-view :key="tick" />
     <CapturaRapida @guardado="refrescarTrasCaptura" />
     <TourGuias ref="tour" :pais="ctxPais" />
-    <InstallPrompt />
+    <InstallPrompt v-if="authed" />
     <UpdateBanner />
     <CookieBanner />
     <ConsentBanner />
@@ -185,6 +185,15 @@ function go(tipo: string) { fan.value = false; router.push({ path: '/movimientos
     display: flex; align-items: center; gap: 10px;
     position: sticky; top: 0; z-index: 15;
     background: var(--bg);
+  }
+  /* El landing arranca con un hero navy a sangre. Con la regla de arriba la
+     barra clara queda fixed/sticky sobre el hero y le corta el titulo, asi que
+     aqui vuelve a flujo normal y se centra (el landing no tiene columna
+     lateral, por eso tampoco el margen de 216px). */
+  .topbar--landing {
+    max-width: none; margin: 0; padding: 16px 24px;
+    position: static; z-index: auto;
+    background: transparent;
   }
 }
 </style>
