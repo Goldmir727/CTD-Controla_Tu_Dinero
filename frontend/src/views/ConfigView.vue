@@ -60,8 +60,9 @@
     </div>
     <button class="item" @click="toggle('moneda')"><span>País y moneda<small>{{ paisNombre }} · {{ me.moneda }}</small></span><span>›</span></button>
     <div v-if="open === 'moneda'" class="panel row2">
-      <p class="sub" style="margin: 0; flex-basis: 100%">
-        El país define el formato de los números y si la app razona en quincenas.
+<p class="sub" style="margin: 0; flex-basis: 100%">
+        El país define el formato de los números. Tus cifras nunca cambian: solo
+        cómo se escriben.
       </p>
       <button
         v-for="p in catalogoPaises"
@@ -73,6 +74,21 @@
       <button class="btn-mint" :disabled="busy.moneda || !paisEdit" @click="guardarMoneda">
         <span v-if="busy.moneda" class="spinner"></span>Guardar
       </button>
+    </div>
+    <button class="item" @click="toggle('periodo')">
+      <span>Cómo cuentas el mes<small>{{ me.usa_quincena ? 'Por quincenas (cada 15 días)' : 'Por mes completo' }}</small></span>
+      <span>›</span>
+    </button>
+    <div v-if="open === 'periodo'" class="panel row2">
+      <p class="sub" style="margin: 0; flex-basis: 100%">
+        Define en qué corte ves "cómo vas". No cambia tus movimientos ni tu dinero:
+        solo cómo se agrupan los días para proyectar. Si te pagan cada 15 días,
+        elige quincena.
+      </p>
+      <button :class="['chip', !me.usa_quincena ? 'on' : '']" @click="setPeriodo(false)">Por mes</button>
+      <button :class="['chip', me.usa_quincena ? 'on' : '']" @click="setPeriodo(true)">Por quincena</button>
+      <p v-if="msg.periodo" class="sub" style="flex-basis: 100%">{{ msg.periodo }}</p>
+      <p v-if="err.periodo" class="alert" style="flex-basis: 100%">{{ err.periodo }}</p>
     </div>
     <button class="item" @click="toggle('semana')"><span>Inicio de semana</span><span>{{ semana }} ›</span></button>
     <div v-if="open === 'semana'" class="panel row2">
@@ -258,7 +274,7 @@ import { usePwaUpdate } from '../composables/usePwaUpdate'
 import { archivoADataURL } from '../composables/useFoto'
 const router = useRouter()
 const auth = useAuth()
-const me = ref({ nombre: '', correo: '', moneda: 'COP', pais: 'CO', pais_nombre: 'Colombia', foto_url: null as string | null })
+const me = ref({ nombre: '', correo: '', moneda: 'COP', pais: 'CO', pais_nombre: 'Colombia', foto_url: null as string | null, usa_quincena: false })
 const fotoInput = ref<HTMLInputElement | null>(null)
 const cuentas = ref<{ id: string; nombre: string; tipo: string; saldo_actual: number }[]>([])
 const cats = ref<{ id: string; nombre: string; tipo: string; activa: boolean }[]>([])
@@ -311,9 +327,9 @@ const div = reactive({ origen: '', nombre: '', monto: null as number | null })
 const ncat = reactive({ nombre: '', tipo: 'gasto' })
 const nmet = ref('')
 const impModo = ref('agregar')
-const busy = reactive({ perfil: false, moneda: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
-const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '' })
-const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', twofa: '', reset: '' })
+const busy = reactive({ perfil: false, moneda: false, periodo: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
+const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '', periodo: '' })
+const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', periodo: '', twofa: '', reset: '' })
 // El boton se deshabilita si no eres PRO, pero el usuario tiene que poder LEER
 // por que esta bloqueado: un boton muerto sin explicacion parece un error.
 const esPro = ref(false)
@@ -387,6 +403,26 @@ const { data } = await api.patch('/auth/me', { pais: paisEdit.value })
     configurarFormato(data.pais, data.moneda)
   }
   finally { busy.moneda = false }
+}
+/**
+ * El periodo de la revision (mes o quincena) es preferencia del usuario, no del
+ * pais: la app razona por mes para cualquiera y solo quien cobre cada 15 dias
+ * activa la quincena. Se cambia el corte REAL de los calculos, no el texto.
+ */
+async function setPeriodo(valor: boolean) {
+  if (valor === me.value.usa_quincena) return
+  busy.periodo = true; msg.periodo = ''; err.periodo = ''
+  try {
+    const { data } = await api.patch('/auth/me', { usa_quincena: valor })
+    me.value.usa_quincena = data.usa_quincena
+    msg.periodo = data.usa_quincena
+      ? 'Ahora cuentas por quincenas: Inicio se mueve a la quincena del 1 al 15 y del 16 al final.'
+      : 'Ahora cuentas por mes: Inicio se mueve del 1 al último día del mes.'
+    // App.vue tiene el contexto del pais (lo usa el tour) y no se entera solo.
+    window.dispatchEvent(new CustomEvent('ctd:periodo', { detail: data.usa_quincena }))
+  } catch {
+    err.periodo = 'No se pudo cambiar. Reintenta.'
+  } finally { busy.periodo = false }
 }
 async function cambiarCorreo() {
   busy.correo = true; err.correo = ''; msg.correo = ''

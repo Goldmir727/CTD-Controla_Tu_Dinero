@@ -268,7 +268,7 @@ async function confirmar() {
 </script>
 
 <template>
-  <button v-if="authed && !abierto" class="pill-captura" @click="abrir">
+  <button v-if="authed && !abierto" class="pill-captura" data-tour="captura" @click="abrir">
     <i class="bi bi-magic"></i><span>Capturar</span>
   </button>
 
@@ -359,6 +359,18 @@ async function confirmar() {
               ? 'No dijiste el monto. Escríbelo a mano.'
               : 'Ese monto no estaba en tu texto: la IA lo dedujo. Confírmalo.' }}
           </p>
+
+          <!--
+            Cuando NO hay coincidencias, el unico que puede decir "esto se repite"
+            es el usuario. Antes no habia forma: `fijo` venia de lo que proponia la
+            IA y nunca habia un interruptor, asi que un gasto periodico que no
+            aceptaba como "fijo" se guardaba como variable para siempre. Vale igual
+            para ingresos: el sueldo o la mesada son fijos.
+          -->
+          <label v-if="!m.coincidencias?.length" class="check cap-fijo">
+            <input type="checkbox" v-model="m.fijo" />
+            {{ m.tipo === 'gasto' ? 'Este gasto se repite' : 'Este ingreso se repite' }}
+          </label>
 
           <!--
             El usuario ya declaró este fijo en /plan y ahora captura algo que se le
@@ -482,6 +494,8 @@ async function confirmar() {
 .tipo.ingreso { background: var(--mint-soft); color: var(--mint-dark); }
 .monto { flex: 1; text-align: right; font-weight: 700; }
 .prop-meta { margin-top: 7px; font-size: 12px; color: var(--ink-soft); }
+.cap-fijo { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.cap-fijo input { margin: 0; accent-color: var(--mint-dark); }
 .warn { margin: 8px 0 0; font-size: 12px; color: var(--warning); font-weight: 600; }
 .avisos { margin-top: 10px; font-size: 12px; color: var(--ink-soft); }
 .avisos p { margin: 4px 0; }

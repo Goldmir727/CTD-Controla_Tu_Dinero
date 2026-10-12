@@ -43,14 +43,15 @@ export type Paso = {
 }
 
 const QUINCENA = (c: ContextoPais) =>
-  `En ${c.nombre} se cobra dos veces al mes, y CTD razona en quincenas. ` +
-  `"Cierra en" proyecta cómo vas al ritmo actual: asume tu ritmo y los fijos que ` +
-  `quedan por vencer, pero no anticipa ingresos.`
+  `Elegiste contar por quincenas: CTD parte el mes en dos (1 al 15 y 16 al final) ` +
+  `porque es como te pagan. "Cierra en" proyecta cómo vas al ritmo actual: asume tu ` +
+  `ritmo y los fijos que quedan por vencer, pero no anticipa ingresos.`
 
 const SIN_QUINCENA = (c: ContextoPais) =>
-  `En ${c.nombre} no se cobra por quincena, así que CTD razona por mes: te dice ` +
-  `cómo vas contra el presupuesto del mes y qué fijos te tocan antes de que se ` +
-  `termine. Las proyecciones nunca anticipan ingresos.`
+  `CTD razona por mes completo. "Cierra en" proyecta cómo vas al ritmo actual: ` +
+  `asume tu ritmo y los fijos que te tocan antes de que se termine el mes. Las ` +
+  `proyecciones nunca anticipan ingresos. Si te pagan cada 15 días, puedes cambiarlo ` +
+  `en Ajustes, en "Cómo cuentas el mes".`
 
 export function pasosPara(pais: ContextoPais): Paso[] {
   const conQuincena = pais.usaQuincena
@@ -62,13 +63,20 @@ export function pasosPara(pais: ContextoPais): Paso[] {
         'plata, controlar presupuestos y metas, y preguntarle al asesor sobre tus ' +
         'números. Te lo mostramos en cuarenta segundos. Puedes saltarlo cuando quieras.',
     },
-    {
-      selector: '[data-tour="capturar"]',
+    /*
+ * El selector apuntaba a `[data-tour="capturar"]`, que estaba en el boton
+ * "+ Nuevo movimiento" y en el flotante: los dos abren el formulario MANUAL.
+ * El paso decia "dictalo" sobre un boton donde no se dicta nada, que es la
+ * ambiguedad que reporto el usuario. Ahora apunta a la pastilla de Captura,
+ * que si acepta frase y microfono.
+ */
+{
+      selector: '[data-tour="captura"]',
       titulo: 'Registra lo que gastaste, hablándolo',
       texto:
-        'Escribe "gasté 25 mil en un almuerzo" o dictalo. La app te muestra lo que ' +
-        'entendió y tú confirmas antes de que se guarde nada. Si el monto no ' +
-        'estaba en tu frase, te lo pide a mano.',
+        'Toca Capturar y escribe "gasté 25 mil en un almuerzo", o dictalo con el ' +
+        'microfono. La app te muestra lo que entendió y tú confirmas antes de que ' +
+        'se guarde nada. También sirve para ingresos y para pagos que se repiten.',
       ruta: '/movimientos',
     },
     {

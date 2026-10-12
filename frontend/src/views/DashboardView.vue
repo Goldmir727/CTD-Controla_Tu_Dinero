@@ -43,7 +43,7 @@
       </div>
     </section>
 
-    <section v-if="revision" class="card revision" data-tour="quincena">
+<section v-if="revision" class="card revision" data-tour="quincena">
       <div class="revision-cab">
         <div>
           <div class="eyebrow">{{ revision.etiqueta_legible }}</div>
@@ -52,7 +52,7 @@
           </div>
         </div>
         <div class="revision-saldo">
-          <div class="eyebrow">CIERRA EN</div>
+          <div class="eyebrow">{{ usaQuincena ? 'CIERRA EN' : 'CIERRA EL MES EN' }}</div>
           <strong :class="revision.proyeccion.saldo_al_cerrar >= 0 ? 'pos' : 'neg'">
             {{ revision.proyeccion.saldo_al_cerrar >= 0 ? '+' : '−' }}{{ fmt(Math.abs(revision.proyeccion.saldo_al_cerrar)) }}
             <span class="unidad">{{ cod }}</span>
@@ -60,7 +60,7 @@
         </div>
       </div>
 
-      <div class="revision-bar" :title="'Vas ' + revision.quincena.dias_transcurridos + ' de ' + revision.quincena.dias_totales + ' días de la quincena'">
+      <div class="revision-bar" :title="'Vas ' + revision.quincena.dias_transcurridos + ' de ' + revision.quincena.dias_totales + ' días ' + (usaQuincena ? 'de la quincena' : 'del mes')">
         <span :style="{ width: Math.round((revision.quincena.dias_transcurridos / revision.quincena.dias_totales) * 100) + '%' }"></span>
       </div>
 
@@ -88,8 +88,8 @@
         <p>{{ a.mensaje }}</p>
       </div>
 
-      <p v-if="revision.comparacion" class="sub revision-comp">
-        La {{ revision.comparacion.legible }} gastaste
+<p v-if="revision.comparacion" class="sub revision-comp">
+        {{ usaQuincena ? 'La ' : 'En ' }}{{ revision.comparacion.legible }} gastaste
         <strong>${{ fmt(revision.comparacion.gastos) }}</strong>
         <span :class="revision.movimientos.gastos > revision.comparacion.gastos ? 'neg' : 'pos'">
           ({{ revision.movimientos.gastos > revision.comparacion.gastos ? '+' : '−' }}${{ fmt(Math.abs(revision.movimientos.gastos - revision.comparacion.gastos)) }})
@@ -181,6 +181,7 @@ type AlertaRitmo = {
 }
 type Revision = {
   etiqueta_legible: string
+  usa_quincena: boolean
   quincena: { dias_transcurridos: number; dias_totales: number; dias_restantes: number }
   movimientos: { ingresos: number; gastos: number; balance: number; movimientos: number }
   fijos: { total: number; gastos: number; ingresos: number; items: { nombre: string; dia: number; veces: number; monto: number }[] }
@@ -190,6 +191,9 @@ type Revision = {
   mensaje: string
 }
 const revision = ref<Revision | null>(null)
+// El backend ya decide el corte segun la preferencia del usuario; aqui solo se
+// usa para las rotulos. El fallback es MENSUAL porque es el default del producto.
+const usaQuincena = computed(() => revision.value?.usa_quincena ?? false)
 
 onMounted(async () => {
   const [me, cuentas, resumen, met, perfiles, rev] = await Promise.all([

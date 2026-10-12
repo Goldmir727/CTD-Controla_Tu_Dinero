@@ -5,7 +5,7 @@
       <strong>CTD</strong>
       <span style="flex: 1"></span>
       <span data-tour="perfil" style="display:flex"><SelectorPerfil v-if="authed" @cambio="tick++" /></span>
-      <button v-if="showHeaderCta" class="btn-new desktop-only" data-tour="capturar" @click="$router.push('/movimientos/nuevo')">+ Nuevo movimiento</button>
+      <button v-if="showHeaderCta" class="btn-new desktop-only" data-tour="nuevo-movimiento" @click="$router.push('/movimientos/nuevo')">+ Nuevo movimiento</button>
       <button v-if="isLanding && !authed" class="btn-ghost" @click="$router.push('/login')">Entrar</button>
       <button v-if="authed" class="gear" @click="abrirAyuda" aria-label="Ayuda" title="Ayuda"><i class="bi bi-question-lg"></i></button>
       <button v-if="authed" class="gear" data-tour="ajustes" @click="$router.push('/config')" aria-label="Ajustes"><i class="bi bi-gear"></i></button>
@@ -23,7 +23,7 @@
         <button @click="go('gasto')">− Gasto</button>
       </div>
     </div>
-    <button v-if="showFab" class="fab" data-tour="capturar" @click="fan = true">+</button>
+    <button v-if="showFab" class="fab" data-tour="nuevo-movimiento" @click="fan = true">+</button>
     <nav v-if="authed" class="bottom-nav" data-tour="nav">
       <div class="nav-side">
         <router-link to="/inicio">Inicio</router-link>
@@ -127,6 +127,14 @@ async function abrirTour() {
 const modoTutorial = ref(false)
 function onPedirTour() { void abrirTour() }
 /**
+ * Ajustes acaba de cambiar el periodo (mes/quincena). App.vue guarda el
+ * contexto que usa el tour, asi que sin esto el texto del recorrido seguiria
+ * hablando de quincenas a quien acaba de apagarlas.
+ */
+function onPeriodo(e: Event) {
+  ctxPais.value.usaQuincena = Boolean((e as CustomEvent<boolean>).detail)
+}
+/**
  * Ayuda contextual: abre el tour en el paso que explica la pantalla actual y no
  * cambia de ruta, al contrario que abrirTour(), que siempre arranca en Inicio.
  */
@@ -135,6 +143,7 @@ onMounted(() => {
   useTema().init()
   window.addEventListener('ctd:sesion-cerrada', onSesionCerrada)
   window.addEventListener('ctd:ver-tour', onPedirTour)
+window.addEventListener('ctd:periodo', onPeriodo)
   document.addEventListener('visibilitychange', onVisible)
   void validarSesion(true)
   // El formato de dinero y numeros se fija desde la sesion, no desde la moneda
@@ -159,6 +168,7 @@ const ctxPais = ref<{ pais: string; nombre: string; usaQuincena: boolean }>({
 onUnmounted(() => {
   window.removeEventListener('ctd:sesion-cerrada', onSesionCerrada)
   window.removeEventListener('ctd:ver-tour', onPedirTour)
+window.removeEventListener('ctd:periodo', onPeriodo)
 })
 onUnmounted(() => {
   window.removeEventListener('ctd:sesion-cerrada', onSesionCerrada)
