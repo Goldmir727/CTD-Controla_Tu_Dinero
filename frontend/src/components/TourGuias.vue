@@ -67,6 +67,11 @@ function avanzar() {
   indice.value += 1
   void medir()
 }
+/**
+ * Atras NUNCA salta. Sin el salto automatico, volver a un paso cuyo elemento no
+ * esta (la alerta, que solo se ve cuando hay alertas) lo muestra centrado, sin
+ * Spotlight, en lugar de rebotar al siguiente y dejar el boton sin efecto.
+ */
 function atras() {
   if (indice.value > 0) { indice.value -= 1; void medir() }
 }
@@ -120,12 +125,15 @@ async function medir() {
   const p = paso.value
   if (!p?.selector) { caja.value = null; return }
   const el = primerVisible(p.selector)
-  if (!el) {
-    if (modoTutorial.value) { caja.value = null; return }
-    if (!esUltimo.value) { indice.value += 1; return medir() }
-    caja.value = null
-    return
-  }
+  // Nunca se salta un paso, ni hacia adelante ni hacia atras.
+  //
+  // Antes, si el elemento no estaba (la alerta solo aparece cuando hay alertas),
+  // `medir` avanzaba solo. Eso rompia el recorrido de dos maneras: el contador
+  // daba un salto (3 -> 5) y, al volver con Atras, el paso se saltaba de nuevo y
+  // el boton no hacia nada. Ahora el paso siempre se muestra; si su elemento no
+  // esta, la tarjeta sale centrada sin spotlight, que es lo mismo que hace el
+  // modo tutorial.
+  if (!el) { caja.value = null; return }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await new Promise((r) => setTimeout(r, 260))
   const r = el.getBoundingClientRect()
