@@ -11,7 +11,7 @@
  * se vea rara.
  */
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { pasosPara, type ContextoPais, type Paso } from '../tour/pasos'
+import { indiceParaRuta, pasosPara, type ContextoPais, type Paso } from '../tour/pasos'
 
 const CLAVE = 'ctd-tour-v4'
 const abierto = ref(false)
@@ -45,9 +45,22 @@ function abrir(desde = 0) {
   armado.value = false
   void medir()
 }
-function cerrar() { abierto.value = false; armado.value = false; caja.value = null }
+function cerrar() {
+  abierto.value = false
+  armado.value = false
+  modoTutorial.value = false
+  caja.value = null
+  // Al cerrar se olvida por donde iba: la proxima vez arranca en el paso 1.
+  indice.value = 0
+}
 function saltar() { marcar('omitido'); cerrar() }
 function terminar() { marcar('completado'); cerrar() }
+/**
+ * Boton Cerrar. Marca el recorrido como descartado (no completado) para que no
+ * se reabra solo en cada carga, y `cerrar()` reinicia el indice: si el usuario
+ * lo vuelve a lanzar desde Ajustes arranca en el paso 1.
+ */
+function cerrarTour() { marcar('cerrado'); cerrar() }
 
 function avanzar() {
   if (esUltimo.value) return terminar()
@@ -71,39 +84,12 @@ const modoTutorial = ref(false)
 /** El proximo clic fuera se gasta en navegar; el siguiente ya cierra el tour. */
 const armado = ref(false)
 
-/** Click fuera = salir del tutorial, pero sin marcarlo como omitido. */
-function salirALibre() {
-  modoTutorial.value = false
-  armado.value = false
-  abierto.value = false
-  caja.value = null
-}
-
 /** Se llama desde App.vue cuando cambia la ruta mientras el tour esta abierto. */
 function alNavegar() {
   if (!abierto.value) return
   modoTutorial.value = true
   armado.value = false
   void medir()
-}
-
-/**
- * En modo tutorial el fondo es transparente y sin pointer-events, asi que el clic
- * del usuario llega a la app (navega) pero el backdrop NUNCA lo recibe y
- * `salirALibre` no se dispara: el "clic fuera para salir" que prometo el pie era
- * falso y el tour no tenia forma de cerrarse.
- *
- * Aqui se escucha en fase de captura y se resuelve en dos tiempos:
- *   1.er clic -> navega, el tour continua esperando y se rearma al cambiar ruta
- *   2.do clic -> cierra y olvida que se estaba en tutorial
- * No se hace stopPropagation ni preventDefault: la app siempre recibe el clic.
- */
-function alClickTutorial(e: MouseEvent) {
-  if (!abierto.value || !modoTutorial.value) return
-  const t = e.target as HTMLElement | null
-  if (t && t.closest('.tour-card')) return
-  if (!armado.value) { armado.value = true; return }
-  salirALibre()
 }
 
 /**
@@ -147,22 +133,18 @@ async function medir() {
   caja.value = { top: r.top, left: r.left, width: r.width, height: r.height }
 }
 
-/** La tarjeta nunca debe salirse de la ventana. */
-const tarjeta = computed(() => {
-  const c = caja.value
-  const ancho = 340
-  const alto = 210
-  if (!c) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
-  const margen = 14
-  let top = c.top + c.height + margen
-  if (top + alto > window.innerHeight - margen) {
-    top = c.top - alto - margen
-    if (top < margen) top = Math.max(margen, window.innerHeight - alto - margen)
-  }
-  let left = c.left + c.width / 2 - ancho / 2
-  left = Math.max(margen, Math.min(left, window.innerWidth - ancho - margen))
-  return { top: `${top}px`, left: `${left}px`, transform: 'none', width: `${ancho}px` }
-})
+/**
+ * La tarjeta es ESTATICA: siempre centrada, sin seguir al elemento resaltado.
+ * Antes se colocaba pegada al blanco y en movil caia encima de la barra de
+ * navegacion o del boton flotante, tapando el boton que el paso queria
+ * señalar. Centrada nunca se cruza con la barra inferior, que vive en el borde.
+ */
+const tarjeta = computed(() => ({
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 'min(340px, calc(100vw - 32px))',
+}))
 
 /** El recorte queda un poco mas grande que el elemento para que se vea. */
 const agujero = computed(() => {
@@ -177,7 +159,7 @@ const agujero = computed(() => {
 
 function alTeclado(e: KeyboardEvent) {
   if (!abierto.value) return
-  if (e.key === 'Escape') saltar()
+  // Esc ya no cierra: el modal es estatico y la unica salida es "Cerrar".
   if (e.key === 'ArrowRight') avanzar()
   if (e.key === 'ArrowLeft') atras()
 }
@@ -187,13 +169,11 @@ onMounted(() => {
   window.addEventListener('resize', recentrar)
   window.addEventListener('scroll', recentrar, true)
   window.addEventListener('keydown', alTeclado)
-  document.addEventListener('click', alClickTutorial, true)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('resize', recentrar)
   window.removeEventListener('scroll', recentrar, true)
   window.removeEventListener('keydown', alTeclado)
-  document.removeEventListener('click', alClickTutorial, true)
 })
 
 // Antes de los watches: el getter de la linea siguiente corre de inmediato y
@@ -212,15 +192,22 @@ watch(() => props.pais, (p) => {
   if (abierto.value) void medir()
 }, { deep: true })
 
-defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
+/**
+ * Ayuda contextual: abre el tour en el paso que explica la pantalla actual, sin
+ * moverse de ruta. Es lo que dispara el boton "?" de la cabecera.
+ */
+function abrirEnRuta(ruta: string) {
+  abrir(indiceParaRuta(PASOS.value, ruta))
+}
+
+defineExpose({ abrir, abrirEnRuta, pendiente, cerrar, alNavegar })
 </script>
 
 <template>
   <div v-if="abierto && paso" class="tour" :class="{ tutorial: modoTutorial }">
-    <!-- El fondo NO es un "cerrar": es el gesto de "ya entendi, dejame usar la
-         app". Por eso sale del modo tutorial sin marcarlo como omitido, para que
-         Ajustes siga diciendo "Ver" y no "Repetir". -->
-    <div class="tour-backdrop" @click="salirALibre"></div>
+    <!-- Fondo opaco e inerte: el modal es estatico y NO se cierra al hacer clic
+         fuera. La unica salida es el boton Cerrar. -->
+    <div class="tour-backdrop"></div>
 
     <div
       v-if="agujero"
@@ -230,6 +217,7 @@ defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
     ></div>
 
     <div class="tour-card" :style="tarjeta" role="dialog" aria-modal="true">
+      <button class="tour-cerrar" @click="cerrarTour" aria-label="Cerrar el recorrido">Cerrar</button>
       <p class="tour-contador">
         {{ indice + 1 }} de {{ PASOS.length }}
         <span v-if="agujero" class="tour-flecha"></span>
@@ -255,10 +243,10 @@ defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
       </div>
       <p class="tour-pie">
         <template v-if="modoTutorial">
-          Puedes seguir usando la app: el recorrido espera. El siguiente clic fuera lo cierra.
+          Estas en otra pantalla: el recorrido espera aqui. Usa Cerrar para salir.
         </template>
         <template v-else>
-          También con las flechas del teclado. Esc para omitir.
+          También con las flechas del teclado.
         </template>
       </p>
     </div>
@@ -267,19 +255,18 @@ defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
 
 <style scoped>
 .tour { position: fixed; inset: 0; z-index: 90; }
-/* En modo tutorial el fondo NO bloquea la app: el usuario tiene que poder
-   seguir usándola, que es justo lo que se le pidio. */
-.tour-backdrop { position: absolute; inset: 0; }
-.tour.tutorial .tour-backdrop { background: transparent; pointer-events: none; }
+/* El fondo es el que oscurece y el que bloquea. Antes el oscurecido venia del
+   box-shadow del agujero, asi que cuando un paso no encontraba su elemento
+   (por ejemplo la alerta, que solo existe a veces) el modal quedaba sin fondo y
+   la app de detras seguia siendo clicable. */
+.tour-backdrop { position: absolute; inset: 0; background: rgba(5, 11, 59, .72); }
 .tour.tutorial .tour-agujero { outline-color: var(--mint); }
-.tour-card { position: relative; }
 
-/* El agujero: un div del tamaño del elemento con una sombra que tapa todo lo
-   demás. El puntero se desactiva para no comerse los clics de la tarjeta. */
+/* Resalta el elemento señalado por encima del fondo oscurecido. */
 .tour-agujero {
   position: fixed;
   border-radius: 14px;
-  box-shadow: 0 0 0 9999px rgba(5, 11, 59, .72);
+  background: rgba(0, 255, 171, .10);
   pointer-events: none;
   transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
   outline: 2px solid var(--mint);
@@ -296,8 +283,16 @@ defineExpose({ abrir, pendiente, cerrar, alNavegar, salirALibre })
   border: 1px solid var(--line);
   z-index: 1;
 }
+/* Unica salida del modal. */
+.tour-cerrar {
+  position: absolute; top: 10px; right: 10px;
+  background: none; border: 1px solid var(--line); border-radius: 99px;
+  color: var(--ink-soft); font-size: 12px; font-weight: 700;
+  padding: 5px 12px; cursor: pointer;
+}
+.tour-cerrar:hover { color: var(--ink); border-color: var(--mint); }
 .tour-contador {
-  margin: 0 0 6px; font-size: 11px; letter-spacing: .1em;
+  margin: 0 0 6px; padding-right: 64px; font-size: 11px; letter-spacing: .1em;
   color: var(--mint-dark); font-weight: 800; text-transform: uppercase;
 }
 .tour-card h3 { margin: 0 0 8px; font-size: 17px; line-height: 1.25; }

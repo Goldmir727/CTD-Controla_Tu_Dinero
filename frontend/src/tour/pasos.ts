@@ -3,8 +3,12 @@
  *
  * Por que no es un documento: a un usuario nuevo no le sirve leer diez paginas
  * sobre una app que no conoce. Le sirve que le muestres un boton y le digas
- * "esto registra gastos, esto te dice si te alcanza". El texto largo queda en
- * TUTORIAL.md para cuando quiera leerlo con calma.
+ * "esto registra gastos, esto te dice si te alcanza".
+ *
+ * Ojo: TUTORIAL.md NO es la ayuda del usuario. Vive en la raiz del repo, no se
+ * sirve desde dist y no tiene ruta, asi que nadie que use la app puede abrirlo.
+ * La unica ayuda real es este recorrido, y el boton "?" lo abre en el paso que
+ * explica la pantalla actual.
  *
  * Dos reglas que el recorrido respeta siempre:
  *  1. Se puede OMITIR en cualquier momento, y omitir no castiga: no vuelve a
@@ -30,6 +34,12 @@ export type Paso = {
   texto: string | ((c: ContextoPais) => string)
   /** Donde se pone la tarjeta respecto al elemento resaltado. */
   lado?: 'arriba' | 'abajo' | 'derecha' | 'izquierda'
+  /**
+   * Pantalla donde este paso tiene sentido. Es lo que permite que el boton "?"
+   * abra el tour EN el paso que explica lo que el usuario esta mirando, en vez
+   * de siempre por el primero. '*' = sirve en cualquier pantalla.
+   */
+  ruta?: string
 }
 
 const QUINCENA = (c: ContextoPais) =>
@@ -59,12 +69,14 @@ export function pasosPara(pais: ContextoPais): Paso[] {
         'Escribe "gasté 25 mil en un almuerzo" o dictalo. La app te muestra lo que ' +
         'entendió y tú confirmas antes de que se guarde nada. Si el monto no ' +
         'estaba en tu frase, te lo pide a mano.',
+      ruta: '/movimientos',
     },
     {
       selector: '[data-tour="quincena"]',
       titulo: conQuincena ? 'Tu quincena, no tu mes' : 'Cómo vas este mes',
       texto: conQuincena ? QUINCENA(pais) : SIN_QUINCENA(pais),
       lado: 'abajo',
+      ruta: '/inicio',
     },
     {
       selector: '[data-tour="alerta"]',
@@ -82,6 +94,7 @@ export function pasosPara(pais: ContextoPais): Paso[] {
         'presupuestos, metas y gastos fijos, Datos para ver tendencias, y Asesor ' +
         'para preguntar.',
       lado: 'abajo',
+      ruta: '*',
     },
     {
       selector: '[data-tour="perfil"]',
@@ -90,6 +103,7 @@ export function pasosPara(pais: ContextoPais): Paso[] {
         'Cada perfil lleva sus propias cuentas, categorías y saldos. Puedes tener ' +
         'los dos en la misma app sin que se mezclen los números.',
       lado: 'abajo',
+      ruta: '*',
     },
     {
       selector: '[data-tour="ajustes"]',
@@ -100,12 +114,27 @@ export function pasosPara(pais: ContextoPais): Paso[] {
         'dos pasos, y ves qué se está guardando de ti. El informe en PDF es lo ' +
         'único de PRO.',
       lado: 'abajo',
+      ruta: '/config',
     },
     {
       titulo: 'Listo. Ya sabes lo básico',
       texto:
-        'Puedes volver a ver esto cuando quieras desde Ajustes, en "Recorrido ' +
-        'guiado". Si prefieres leer con calma, está TUTORIAL.md.',
+        'Puedes volver a ver esto cuando quieras con el botón ? de la cabecera, o ' +
+        'desde Ajustes, en "Recorrido guiado".',
     },
   ]
+}
+
+/**
+ * Paso que mejor explica la pantalla que el usuario tiene abierta, para que el
+ * boton "?" sea ayuda contextual y no siempre el primer paso.
+ *
+ * Gana el primer paso etiquetado con esa ruta; si ninguno, el primero marcado
+ * como universal ('*'), que es el que explica que hace cada pantalla.
+ */
+export function indiceParaRuta(pasos: Paso[], ruta: string): number {
+  const i = pasos.findIndex((p) => p.ruta === ruta)
+  if (i >= 0) return i
+  const j = pasos.findIndex((p) => p.ruta === '*')
+  return j >= 0 ? j : 0
 }

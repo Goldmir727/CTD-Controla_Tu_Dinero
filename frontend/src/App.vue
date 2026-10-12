@@ -1,12 +1,13 @@
 <template>
-  <div>
-    <header class="topbar" :class="{ 'topbar--landing': isLanding && !authed }">
+<div :class="{ 'app-public': !authed }">
+    <header class="topbar" :class="{ 'topbar--public': !authed }">
       <Logo :width="44" />
       <strong>CTD</strong>
       <span style="flex: 1"></span>
       <span data-tour="perfil" style="display:flex"><SelectorPerfil v-if="authed" @cambio="tick++" /></span>
       <button v-if="showHeaderCta" class="btn-new desktop-only" data-tour="capturar" @click="$router.push('/movimientos/nuevo')">+ Nuevo movimiento</button>
       <button v-if="isLanding && !authed" class="btn-ghost" @click="$router.push('/login')">Entrar</button>
+      <button v-if="authed" class="gear" @click="abrirAyuda" aria-label="Ayuda" title="Ayuda"><i class="bi bi-question-lg"></i></button>
       <button v-if="authed" class="gear" data-tour="ajustes" @click="$router.push('/config')" aria-label="Ajustes"><i class="bi bi-gear"></i></button>
     </header>
     <router-view :key="tick" />
@@ -125,6 +126,11 @@ async function abrirTour() {
 }
 const modoTutorial = ref(false)
 function onPedirTour() { void abrirTour() }
+/**
+ * Ayuda contextual: abre el tour en el paso que explica la pantalla actual y no
+ * cambia de ruta, al contrario que abrirTour(), que siempre arranca en Inicio.
+ */
+function abrirAyuda() { tour.value?.abrirEnRuta(route.path) }
 onMounted(() => {
   useTema().init()
   window.addEventListener('ctd:sesion-cerrada', onSesionCerrada)
@@ -186,14 +192,21 @@ function go(tipo: string) { fan.value = false; router.push({ path: '/movimientos
     position: sticky; top: 0; z-index: 15;
     background: var(--bg);
   }
-  /* El landing arranca con un hero navy a sangre. Con la regla de arriba la
-     barra clara queda fixed/sticky sobre el hero y le corta el titulo, asi que
-     aqui vuelve a flujo normal y se centra (el landing no tiene columna
-     lateral, por eso tampoco el margen de 216px). */
-  .topbar--landing {
+  /* Las pantallas publicas (landing, login, registro) arrancan con un bloque a
+     sangre y no tienen columna lateral. Sin esto heredan el margen de 216px
+     reservado para el sidebar, que descentra el contenido y deja la barra
+     clara pegada encima del hero.
+
+     Doble clase a proposito: tokens.css se importa DESPUES de App.vue, asi que
+     su `.topbar` (0,1,0) le gana a un `.topbar--public` de una sola clase y
+     las correcciones publicas no se aplicaban. */
+  .topbar.topbar--public {
     max-width: none; margin: 0; padding: 16px 24px;
     position: static; z-index: auto;
     background: transparent;
   }
+  /* Mismo desfase en .page: el offset del sidebar no aplica fuera de la app. */
+  .app-public .page { margin-left: auto; }
+  .app-public .topbar { margin-left: auto; }
 }
 </style>

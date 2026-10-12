@@ -5,7 +5,7 @@
       <div class="land-inner">
         <div>
           <p class="eyebrow" style="color: var(--mint)">CTD · CONTROLA TU DINERO</p>
-          <h1 class="display">Registra. Entiende.<br />Decide. <span style="color: var(--mint)">Avanza.</span></h1>
+          <h1 class="display">Registra. Analiza.<br />Decide. <span style="color: var(--mint)">Avanza.</span></h1>
           <p class="land-sub">La PWA de finanzas personales que convierte tus movimientos en decisiones claras. Sin tecnicismos, sin vueltas.</p>
           <div class="land-ctas">
             <button class="land-cta" @click="$router.push(authed ? '/inicio' : '/registro')">
@@ -50,9 +50,9 @@
     <!-- TICKER (duplicado solo si puede animar; si no, texto único centrado) -->
     <div class="ticker" aria-hidden="true">
       <div v-if="!lite" class="marquee-track">
-        <span v-for="i in 2" :key="i">REGISTRA · ENTIENDE · DECIDE · AVANZA ·&nbsp;</span>
+        <span v-for="i in 2" :key="i">REGISTRA · ANALIZA · DECIDE · AVANZA ·&nbsp;</span>
       </div>
-      <div v-else class="ticker-static">REGISTRA · ENTIENDE · DECIDE · AVANZA</div>
+      <div v-else class="ticker-static">REGISTRA · ANALIZA · DECIDE · AVANZA</div>
     </div>
 
     <!-- MÓDULOS: editorial, no tarjetas -->
