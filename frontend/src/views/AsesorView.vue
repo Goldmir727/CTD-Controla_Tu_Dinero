@@ -114,7 +114,6 @@ watch([msgs, loading], async () => {
 .burbuja { border-radius: 14px; padding: 10px 14px; max-width: 88%; font-size: 15px; }
 .burbuja.mia { background: var(--navy); color: #fff; justify-self: end; }
 .burbuja.ia { background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
-.chip{border:1px solid var(--navy);background:var(--surface);color:var(--navy);border-radius:99px;padding:8px 14px;font-weight:700}
-.chip.on{background:var(--navy);color:#fff}
+/* .chip vive en tokens.css */
 .chat-chip{white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis;flex:none}
 </style>

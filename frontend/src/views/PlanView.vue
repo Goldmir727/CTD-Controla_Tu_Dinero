@@ -337,8 +337,7 @@ onMounted(cargar)
 </script>
 
 <style>
-.chip{border:1px solid var(--navy);background:var(--surface);color:var(--navy);border-radius:99px;padding:8px 14px;font-weight:700}
-.chip.on{background:var(--navy);color:#fff}
+/* .chip vive en tokens.css */
 .sub{font-size:13px;opacity:.65}
 .link{background:none;border:0;color:var(--ink-soft)}
 .btn-new{background:var(--mint);color:var(--navy);border:0;border-radius:12px;padding:10px 14px;font-weight:800;white-space:nowrap}

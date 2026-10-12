@@ -38,6 +38,18 @@
 [data-theme='dark'] .chip { border-color: var(--ink-soft); background: transparent; color: var(--ink); }
 [data-theme='dark'] .chip.on { background: var(--mint); border-color: var(--mint); color: var(--navy); }
 
+/* Chip base. Vive aqui y no en cada vista porque Vite parte el CSS por ruta:
+   si la regla se queda dentro de Movimientos/Plan/etc, entrar directo a otra
+   pantalla (por ejemplo Nuevo movimiento) carga sin ella y el chip sale como
+   un boton pelado. tokens.css entra siempre. */
+.chip {
+  border: 1px solid var(--navy); background: var(--surface); color: var(--navy);
+  border-radius: 99px; padding: 8px 14px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.chip.on { background: var(--navy); color: #fff; }
+
 * { box-sizing: border-box; }
 :root { color-scheme: light; }
 [data-theme='dark'] { color-scheme: dark; }

@@ -595,8 +595,7 @@ onMounted(async () => {
 .row2 .input,.row2 .chip{flex:1;min-width:120px}
 .line{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}
 .line small{opacity:.65}
-.chip{border:1px solid var(--navy);background:var(--surface);color:var(--navy);border-radius:99px;padding:8px 14px;font-weight:700}
-.chip.on{background:var(--navy);color:#fff}
+/* .chip vive en tokens.css */
 .ok{color:#00B37A;font-size:13px}
 .sub{font-size:13px;opacity:.65}
 .btn-logout{margin-top:16px;width:100%;padding:14px;border-radius:14px;background:var(--surface);color:var(--danger);border:1px solid var(--danger);font-weight:800;cursor:pointer}

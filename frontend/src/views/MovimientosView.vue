@@ -171,8 +171,7 @@ watch(q, () => { clearTimeout(t); t = setTimeout(cargar, 350) })
 </script>
 
 <style>
-.chip { border: 1px solid var(--navy); background: var(--surface); color: var(--navy); border-radius: 99px; padding: 8px 14px; font-weight: 700; }
-.chip.on { background: var(--navy); color: #fff; }
+/* .chip vive en tokens.css */
 .link { background: none; border: 0; color: var(--ink-soft); margin-top: 8px; }
 .unidad { opacity: .65; font-weight: 600; }
 .row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
