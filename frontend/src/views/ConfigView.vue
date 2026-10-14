@@ -177,9 +177,10 @@
           <span v-if="busy.pdf" class="spinner"></span>Informe del mes (PDF)
         </button>
       </div>
-      <p v-if="!esPro" class="sub candado">
+<p v-if="!esPro" class="sub candado">
         <i class="bi bi-lock-fill"></i> El informe en PDF es de PRO. Para respaldar o
         revisar tus datos, el Excel de arriba y el JSON de abajo salen gratis.
+        <button class="link pro-enlace" @click="$router.push('/pro')">Ver el plan PRO</button>
       </p>
 
       <hr class="divider" />
@@ -207,6 +208,49 @@
       </button>
     </div>
     <p v-if="err.twofa" class="alert">{{ err.twofa }}</p>
+
+    <button class="item" @click="toggle('whatsapp')">
+      <span>Registrar por WhatsApp<small v-if="waVinculado">Conectado al {{ waTelefono }}</small><small v-else>Escribe o dicta tus gastos desde WhatsApp</small></span>
+      <span>›</span>
+    </button>
+    <div v-if="open === 'whatsapp'" class="panel">
+      <p v-if="waEstado.configurado" class="sub" style="margin: 0">
+        Escríbele al bot lo que gastaste y te lo registra. También entiendes notas
+        de voz, ingresos y pagos que se repiten.
+      </p>
+      <p v-else class="alert" style="margin: 0">
+        El bot todavía no está habilitado. Se activa cuando el servidor tenga las
+        credenciales de Meta.
+      </p>
+
+      <template v-if="waVinculado">
+        <p class="sub" style="margin: 8px 0 0">
+          <i class="bi bi-check-circle-fill"></i> Conectado. Ya puedes escribirle.
+        </p>
+        <button class="btn-ghost" @click="desvincular">Desconectar</button>
+      </template>
+
+      <template v-else-if="waEstado.configurado">
+        <div class="field" style="margin-top: 10px">
+          <label for="wa-tel">Tu número de WhatsApp</label>
+          <input id="wa-tel" v-model="waTel" class="input" placeholder="3001234567" inputmode="numeric" />
+        </div>
+        <button class="btn-mint" :disabled="waEnviado" @click="pedirCodigo">
+          <span v-if="waEnviado" class="spinner"></span>
+          {{ waEnviado ? 'Código enviado…' : 'Enviarme un código' }}
+        </button>
+        <p v-if="msg.wa" class="sub">{{ msg.wa }}</p>
+        <template v-if="waEnviado">
+          <div class="field" style="margin-top: 10px">
+            <label for="wa-cod">Código de 6 dígitos</label>
+            <input id="wa-cod" v-model="waCodigo" class="input" placeholder="000000" inputmode="numeric" maxlength="6" />
+          </div>
+          <button class="btn-mint" :disabled="waCodigo.length < 4" @click="confirmarCodigo">Conectar</button>
+        </template>
+      </template>
+
+      <p v-if="err.wa" class="alert">{{ err.wa }}</p>
+    </div>
 
     <div class="eyebrow">ZONA DE PELIGRO</div>
     <div class="item" style="cursor: default">
@@ -327,9 +371,9 @@ const div = reactive({ origen: '', nombre: '', monto: null as number | null })
 const ncat = reactive({ nombre: '', tipo: 'gasto' })
 const nmet = ref('')
 const impModo = ref('agregar')
-const busy = reactive({ perfil: false, moneda: false, periodo: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
-const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '', periodo: '' })
-const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', periodo: '', twofa: '', reset: '' })
+const busy = reactive({ perfil: false, moneda: false, periodo: false, wa: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
+const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '', periodo: '', wa: '' })
+const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', periodo: '', wa: '', twofa: '', reset: '' })
 // El boton se deshabilita si no eres PRO, pero el usuario tiene que poder LEER
 // por que esta bloqueado: un boton muerto sin explicacion parece un error.
 const esPro = ref(false)
@@ -341,6 +385,7 @@ function abrirTour() { window.dispatchEvent(new CustomEvent('ctd:ver-tour')) }
 onMounted(() => {
   try { tourPendiente.value = !JSON.parse(localStorage.getItem('ctd-tour-v4') || '{}').visto }
   catch { tourPendiente.value = false }
+  void cargarWa()
 })
 const fmt = (n: number) => numero(n)
 const correoMask = computed(() => {
@@ -404,6 +449,60 @@ const { data } = await api.patch('/auth/me', { pais: paisEdit.value })
   }
   finally { busy.moneda = false }
 }
+/** El backend manda el motivo en `detail`; si no viene, algo mas grave Fallo. */
+function detalleError(e: unknown): string {
+  const r = (e as { response?: { data?: { detail?: string } } }).response
+  return r?.data?.detail ?? 'Algo salió mal. Reintenta.'
+}
+
+/**
+ * Vinculacion de WhatsApp. Dos pasos a proposito: primero se pide el codigo (que
+ * viaja por el mismo WhatsApp, para comprobar que el numero es de quien dice
+ * ser) y despues se pega. Pedir solo el numero no probaria nada.
+ */
+const waEstado = ref({ configurado: false, telefono: null as string | null, vinculado: false })
+const waTel = ref('')
+const waCodigo = ref('')
+const waEnviado = ref(false)
+const waVinculado = computed(() => waEstado.value.vinculado)
+const waTelefono = computed(() => waEstado.value.telefono || '')
+
+async function cargarWa() {
+  try {
+    const { data } = await api.get('/whatsapp/estado')
+    waEstado.value = data
+    if (data.telefono && !waVinculado.value) waTel.value = data.telefono
+  } catch { /* si falla, la seccion queda en "no configurado" */ }
+}
+async function pedirCodigo() {
+  busy.wa = true; err.wa = ''; msg.wa = ''
+  try {
+    const { data } = await api.post('/whatsapp/vincular', { telefono: waTel.value })
+    waEnviado.value = true
+    msg.wa = data.mensaje || 'Te mandé el código.'
+  } catch (e: unknown) {
+    err.wa = detalleError(e)
+  } finally { busy.wa = false }
+}
+async function confirmarCodigo() {
+  busy.wa = true; err.wa = ''; msg.wa = ''
+  try {
+    await api.post('/whatsapp/confirmar-vinculo', { codigo: waCodigo.value })
+    waEnviado.value = false
+    waCodigo.value = ''
+    msg.wa = '¡Listo! Ya puedes escribirle al bot.'
+    await cargarWa()
+  } catch (e: unknown) {
+    err.wa = detalleError(e)
+  } finally { busy.wa = false }
+}
+async function desvincular() {
+  busy.wa = true; err.wa = ''
+  try { await api.delete('/whatsapp/vinculo'); await cargarWa() }
+  catch (e: unknown) { err.wa = detalleError(e) }
+  finally { busy.wa = false }
+}
+
 /**
  * El periodo de la revision (mes o quincena) es preferencia del usuario, no del
  * pais: la app razona por mes para cualquiera y solo quien cobre cada 15 dias
@@ -632,6 +731,7 @@ onMounted(async () => {
 .line{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}
 .line small{opacity:.65}
 /* .chip vive en tokens.css */
+.pro-enlace { display: inline; margin-left: 4px; padding: 0; font-weight: 700; color: var(--mint-dark); }
 .ok{color:#00B37A;font-size:13px}
 .sub{font-size:13px;opacity:.65}
 .btn-logout{margin-top:16px;width:100%;padding:14px;border-radius:14px;background:var(--surface);color:var(--danger);border:1px solid var(--danger);font-weight:800;cursor:pointer}
