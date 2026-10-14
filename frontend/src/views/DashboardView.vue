@@ -43,6 +43,22 @@
       </div>
     </section>
 
+<!--
+    El balance va ANTES que la proyección, y no por estética: la proyección es
+    una estimación que asume el ritmo actual, y el balance es lo que de verdad
+    entró menos lo que salió. Arrancar por la estimación invita a leer
+    "+8.167.200" como plata que uno tiene, y no la tiene.
+-->
+<section class="card">
+      <div class="eyebrow">BALANCE DE {{ mesLabel }}</div>
+      <div class="big-number" style="font-size: 32px">{{ balance >= 0 ? '+' : '−' }}${{ fmt(Math.abs(balance)) }}</div>
+      <hr class="divider" />
+      <div class="grid-2">
+        <div><div class="eyebrow">INGRESOS</div><strong>${{ fmt(ingresos) }}</strong></div>
+        <div><div class="eyebrow">GASTOS</div><strong>${{ fmt(gastos) }}</strong></div>
+      </div>
+    </section>
+
 <section v-if="revision" class="card revision" data-tour="quincena">
       <div class="revision-cab">
         <div>
@@ -51,13 +67,16 @@
             día {{ revision.quincena.dias_transcurridos }} de {{ revision.quincena.dias_totales }}
           </div>
         </div>
-        <div class="revision-saldo">
-          <div class="eyebrow">{{ usaQuincena ? 'CIERRA EN' : 'CIERRA EL MES EN' }}</div>
-          <strong :class="revision.proyeccion.saldo_al_cerrar >= 0 ? 'pos' : 'neg'">
-            {{ revision.proyeccion.saldo_al_cerrar >= 0 ? '+' : '−' }}{{ fmt(Math.abs(revision.proyeccion.saldo_al_cerrar)) }}
-            <span class="unidad">{{ cod }}</span>
-          </strong>
-        </div>
+<div class="revision-saldo">
+      <div class="eyebrow proy"><i class="bi bi-graph-up"></i> Proyección</div>
+      <strong :class="revision.proyeccion.saldo_al_cerrar >= 0 ? 'pos' : 'neg'">
+        {{ revision.proyeccion.saldo_al_cerrar >= 0 ? '+' : '−' }}{{ fmt(Math.abs(revision.proyeccion.saldo_al_cerrar)) }}
+        <span class="unidad">{{ cod }}</span>
+      </strong>
+      <div class="sub proy-pie">
+        al {{ usaQuincena ? 'cerrar la quincena' : 'cerrar el mes' }}
+      </div>
+    </div>
       </div>
 
       <div class="revision-bar" :title="'Vas ' + revision.quincena.dias_transcurridos + ' de ' + revision.quincena.dias_totales + ' días ' + (usaQuincena ? 'de la quincena' : 'del mes')">
@@ -96,20 +115,10 @@
         </span>
       </p>
 
-      <p class="sub revision-nota">
+<p class="sub revision-nota">
         <i class="bi bi-info-circle"></i>
         La proyección asume tu ritmo actual y lo fijo que falta. No anticipa ingresos.
       </p>
-    </section>
-
-    <section class="card">
-      <div class="eyebrow">BALANCE DE {{ mesLabel }}</div>
-      <div class="big-number" style="font-size: 32px">{{ balance >= 0 ? '+' : '−' }}${{ fmt(Math.abs(balance)) }}</div>
-      <hr class="divider" />
-      <div class="grid-2">
-        <div><div class="eyebrow">INGRESOS</div><strong>${{ fmt(ingresos) }}</strong></div>
-        <div><div class="eyebrow">GASTOS</div><strong>${{ fmt(gastos) }}</strong></div>
-      </div>
     </section>
 
     <hr class="divider" />
@@ -239,6 +248,17 @@ onMounted(async () => {
 .revision-dia { font-size: 15px; font-weight: 700; margin-top: 2px; }
 .revision-saldo { text-align: right; }
 .revision-saldo strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+/*
+  La proyección se marca por fuera, no solo por el rotulo: el numero va en 19px
+  y en verde, igual que un saldo de verdad. Un "proyeccion" en versalitas pasa
+  inadvertido al lado de una cifra que el usuario lee de un vistazo, asi que el
+  bloque lleva borde punteado y tono atenuado para que se lea como lo que es:
+  una estimacion, no plata en la cuenta.
+*/
+.revision-saldo .proy { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-soft); }
+.revision-saldo .proy i { font-size: 12px; }
+.revision-saldo strong { border-bottom: 1px dashed var(--line); display: inline-block; padding-bottom: 2px; }
+.revision-saldo .proy-pie { margin-top: 3px; font-size: 11px; }
 .revision-bar { height: 6px; background: var(--line); border-radius: 99px; margin: 12px 0 14px; overflow: hidden; }
 .revision-bar span { display: block; height: 100%; background: var(--mint); border-radius: 99px; }
 .revision-nums strong { font-size: 16px; font-variant-numeric: tabular-nums; }
