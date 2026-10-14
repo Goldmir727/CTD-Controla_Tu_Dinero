@@ -1,4 +1,4 @@
-"""Captura en lenguaje natural: escribir (o hablar) una frase y registrar.
+﻿"""Captura en lenguaje natural: escribir (o hablar) una frase y registrar.
 
 Flujo, en dos pasos a proposito:
   1. POST /captura            -> devuelve una PROPUESTA, no escribe nada.
@@ -32,6 +32,7 @@ from app.models.goals import Recurring
 from app.models.perfil import Perfil
 from app.models.user import User
 from app.services import captura as cap
+from app.services import captura_confirmar as capx
 from app.services import colombia as co
 from app.services import deteccion as det
 
@@ -54,7 +55,7 @@ class MovimientoAConfirmar(BaseModel):
     fecha: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     fijo: bool = False
     # Que fijo YA DECLARADO es este movimiento. Lo llena el usuario cuando la app
-    # pregunta "¿es el mismo Arriendo o uno distinto?". Si viene None y el
+    # pregunta "Â¿es el mismo Arriendo o uno distinto?". Si viene None y el
     # movimiento se parece a un fijo existente, se guarda sin enlazar: el
     # movimiento es real de todos modos, lo unico que se pierde es la linea que
     # lo ataba al plan. Perder el enlace es mucho mejor que bloquear el gasto.
@@ -87,29 +88,15 @@ def capturar(data: CapturaIn, db: Session = Depends(get_db),
     """Analiza la frase y devuelve una propuesta. NO escribe movimientos."""
     cuota = consumir_captura(db, user)
     try:
-        propuesta = cap.analizar(data.texto, db, user.id, perfil.id)
+        propuesta = capx.proponer(db, user, perfil, data.texto, data.transcripcion)
     except cap.CapturaError as e:
         _bitacora(db, user, perfil, data, "error", [], 0, False)
         db.commit()
         raise HTTPException(422, str(e))
 
-    reg = _bitacora(db, user, perfil, data, "propuesta", propuesta["movimientos"], 0,
-                    propuesta["requiere_confirmacion_monto"])
-    db.commit()
-
-    # Por cada movimiento, que fijos declarados PODRIAN ser. La UI pregunta
-    # "¿es este el Arriendo que ya tienes o uno distinto?" en vez de decidir
-    # sola: el usuario sabe, la app no.
-    for m in propuesta["movimientos"]:
-        fecha = _validar_fecha(m["fecha"])
-        m["coincidencias"] = det.detectar(
-            db, user.id, perfil.id, m.get("descripcion") or "", m["tipo"], m["monto"],
-            fecha.day)
-        m.pop("categoria", None)   # la UI lo resuelve por id; no weighs la cadena
-
-    # Lo que la UI necesita mostrar y permitir editar.
-    return {**propuesta, "captura_id": reg.id, "cuota": cuota,
-            "opciones": _opciones(db, user, perfil)}
+    # Ojo: la cuota se consume UNA sola vez, aqui arriba. Consumirla tambien al
+    # confirmar castigaria al usuario cada vez que el "Guardar" se rebotaba.
+    return {**propuesta, "cuota": cuota, "opciones": _opciones(db, user, perfil)}
 
 
 @router.post("/captura/confirmar")
@@ -122,7 +109,7 @@ def confirmar(data: CapturaConfirmarIn, db: Session = Depends(get_db),
     if not reg:
         raise HTTPException(404, "Captura no encontrada")
     if reg.estado == "guardado":
-        raise HTTPException(409, "Esta captura ya se guardó")
+        raise HTTPException(409, "Esta captura ya se guardÃ³")
 
     dudosos = [m for m in data.movimientos
                if any(p["ix"] == i and p["requiere_confirmacion_monto"]
@@ -132,83 +119,18 @@ def confirmar(data: CapturaConfirmarIn, db: Session = Depends(get_db),
     if settings.captura_confirmar_siempre and not data.confirmacion_usuario:
         raise HTTPException(
             422,
-            "Falta la confirmación del usuario. Se pide explícitamente para no "
+            "Falta la confirmaciÃ³n del usuario. Se pide explÃ­citamente para no "
             "guardar cifras que la IA dedujo en vez de leerlas.",
         )
 
-    creados, errores = [], []
-    for i, m in enumerate(data.movimientos):
-        try:
-            cuenta = _resolver_cuenta(db, perfil.id, m.cuenta_id)
-            if not cuenta:
-                raise ValueError("No tienes ninguna cuenta en este perfil")
-            cat = db.query(Category).filter_by(id=m.categoria_id, perfil_id=perfil.id).first()
-            if not cat:
-                raise ValueError("La categoría no existe en este perfil")
-            if cat.tipo not in (m.tipo, "ambos"):
-                raise ValueError(f"La categoría {cat.nombre} no admite {m.tipo}s")
-            met = None
-            if m.metodo_id:
-                met = db.query(PaymentMethod).filter_by(id=m.metodo_id, user_id=user.id).first()
-            fecha = _validar_fecha(m.fecha)
-            mov = Transaction(
-                user_id=user.id, perfil_id=perfil.id, cuenta_id=cuenta.id,
-                categoria_id=cat.id, metodo_id=met.id if met else None,
-                tipo=m.tipo, monto=m.monto, fecha=fecha,
-                descripcion=m.descripcion or cat.nombre,
-                idempotency_key=idempotency_key,
-            )
-            db.add(mov)
-            db.flush()
-            creados.append({"id": mov.id, "tipo": mov.tipo, "monto": float(mov.monto),
-                            "categoria": cat.nombre, "fecha": mov.fecha.isoformat()})
-
-            # Que fijo ya declarado es este movimiento (el usuario dijo "si, es este").
-            # Se valida que sea del perfil: sin esto, mandar un recurrente_id de otro
-            # perfil escribiria un enlace cruzado, que es justo lo que este modulo evita.
-            rec = None
-            if m.recurrente_id:
-                rec = db.query(Recurring).filter_by(id=m.recurrente_id,
-                                                     perfil_id=perfil.id).first()
-            if rec:
-                mov.recurrente_id = rec.id
-                rec.confirmado = True
-            elif m.recurrente_id:
-                errores.append({"indice": i,
-                                "detalle": "Ese fijo no es de este perfil; se guardo sin enlace"})
-
-            # "Es distinto": se crea un fijo NUEVO con este movimiento, para que el
-            # motor lo cuente aparte del que ya existe.
-            # Antes esto solo corria para gastos: un ingreso fijo (el sueldo, una
-            # mesada) NO se creaba nunca, y `usa_quincena` hacia que el motor lo
-            #hevara. Ahora vale para los dos tipos, que es lo coherente con que
-            # Plan tambien acepte ingresos fijos.
-            if m.nuevo_fijo:
-                nombre_fijo = (m.descripcion or cat.nombre)[:120]
-                ya = db.query(Recurring).filter_by(perfil_id=perfil.id, nombre=nombre_fijo,
-                                                    dia=fecha.day, tipo=m.tipo,
-                                                    activo=True).first()
-                if not ya:
-                    db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
-                                     nombre=nombre_fijo, tipo=m.tipo, monto=m.monto,
-                                     dia=fecha.day, frecuencia="mensual",
-                                     cuenta_id=cuenta.id, categoria_id=cat.id, activo=True,
-                                     confirmado=True, nota="Creado desde la captura"))
-            elif m.fijo and not rec and not db.query(
-                    Recurring).filter_by(perfil_id=perfil.id, cuenta_id=cuenta.id,
-                                       categoria_id=cat.id, tipo=m.tipo,
-                                       activo=True).first():
-                db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
-                                 nombre=m.descripcion or cat.nombre, tipo=m.tipo,
-                                 monto=m.monto, dia=fecha.day, frecuencia="mensual",
-                                 cuenta_id=cuenta.id, categoria_id=cat.id, activo=True))
-        except Exception as e:  # noqa: BLE001 - se reporta por movimiento, no se cae todo
-            errores.append({"indice": i, "detalle": str(e)})
-
-    reg.estado = "guardado" if not errores else "parcial"
-    reg.guardados = len(creados)
-    db.commit()
-    return {"guardados": creados, "errores": errores, "creados": len(creados)}
+# A partir de aqui la escritura vive en el servicio: el bot de WhatsApp
+    # entra por la misma puerta y no puede quedar una copia que se desvÃ­e.
+    try:
+        return capx.confirmar_captura(db, user, perfil, data.captura_id,
+                                      [m.model_dump() for m in data.movimientos],
+                                      idempotency_key)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 @router.post("/captura/voz", dependencies=[Depends(captura_limit)])
@@ -236,8 +158,8 @@ def capturar_voz(
     if not cap._tiene_indicios(texto, db):
         raise HTTPException(
             422,
-            f"Escuché \"{texto}\" pero no encontré ningún gasto ahí. "
-            "Prueba algo como: \"gasté 18 mil en el almuerzo\".",
+            f"EscuchÃ© \"{texto}\" pero no encontrÃ© ningÃºn gasto ahÃ­. "
+            "Prueba algo como: \"gastÃ© 18 mil en el almuerzo\".",
         )
     try:
         propuesta = cap.analizar(texto, db, user.id, perfil.id)
@@ -255,7 +177,7 @@ def capturar_voz(
 
 
 def _opciones(db: Session, user: User, perfil: Perfil) -> dict:
-    """Listas para que la UI pueda corregir categoría, cuenta y método."""
+    """Listas para que la UI pueda corregir categorÃ­a, cuenta y mÃ©todo."""
     cats = db.query(Category).filter_by(perfil_id=perfil.id, activa=True).all()
     cuentas = db.query(Account).filter_by(perfil_id=perfil.id).order_by(Account.nombre).all()
     mets = db.query(PaymentMethod).filter_by(user_id=user.id).order_by(PaymentMethod.nombre).all()
@@ -273,9 +195,9 @@ def _validar_fecha(iso: str):
     try:
         f = date.fromisoformat(iso)
     except ValueError:
-        raise ValueError("Fecha inválida")
+        raise ValueError("Fecha invÃ¡lida")
     if f > date.today() + timedelta(days=1):
-        raise ValueError("La fecha no puede ser más de 1 día en el futuro")
+        raise ValueError("La fecha no puede ser mÃ¡s de 1 dÃ­a en el futuro")
     return f
 
 

@@ -57,6 +57,39 @@ class Settings(BaseSettings):
     voz_max_segundos: int = 30
     voz_max_bytes: int = 8_000_000
 
+    # ---- Cobros (Wompi / Bancolombia) ----
+    # Todo vacio = el cobro queda deshabilitado y la app sigue funcionando en
+    # modo manual. Asi se puede desplegar sin credenciales y activarlas depois.
+    wompi_public_key: str = ""
+    # Secreto de "Secretos para integracion tecnica" del dashboard de Wompi.
+    # Es lo unico que separa un webhook real de uno forjado: sin esto, cualquiera
+    # que sepa la URL podria activarse PRO a si mismo.
+    wompi_events_secret: str = ""
+    # Enlace de pago recurrente del plan PRO, creado en el dashboard de Wompi.
+    # Wompi cobra solo cada mes; la app solo extiende el vencimiento cada vez que
+    # llega un evento APPROVED.
+    wompi_enlace_pro: str = ""
+    # Precio en COP. Solo para mostrarlo; el cobro real lo hace Wompi.
+    pro_precio_mes: int = 15_000
+    pro_dias_periodo: int = 30
+
+    # ---- Bot de WhatsApp (Cloud API de Meta) ----
+    # Todo vacio = el bot queda apagado y la API responde 503 sin molestar.
+    # Es el estado por defecto: el codigo se despliega antes de que exista la
+    # cuenta de Meta.
+    whatsapp_token: str = ""
+    whatsapp_phone_id: str = ""
+    # Token que uno mismo inventa y configura en el panel de Meta para que
+    # verifique que el webhook es el suyo.
+    whatsapp_verify_token: str = ""
+    # App Secret de Meta: con esto se valida la firma X-Hub-Signature-256.
+    # Sin el, cualquiera que mande un POST a /whatsapp/webhook podria usar el
+    # bot y gastar llamadas de la IA.
+    whatsapp_app_secret: str = ""
+    # Cuota diaria por telefono SINvinculo, para que el bot no se convierta en
+    # una puerta abierta a gastar la clave de Groq.
+    whatsapp_sin_vinculo_dia: int = 3
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors(cls, v):
