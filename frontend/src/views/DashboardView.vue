@@ -49,7 +49,7 @@
     entró menos lo que salió. Arrancar por la estimación invita a leer
     "+8.167.200" como plata que uno tiene, y no la tiene.
 -->
-<section class="card">
+<section class="card-featured card-balance">
       <div class="eyebrow">BALANCE DE {{ mesLabel }}</div>
       <div class="big-number" style="font-size: 32px">{{ balance >= 0 ? '+' : '−' }}${{ fmt(Math.abs(balance)) }}</div>
       <hr class="divider" />

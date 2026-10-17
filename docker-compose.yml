@@ -43,6 +43,13 @@ services:
       JWT_EXPIRE_MIN: 30
       # Para probar en el celular agrega tu IP https, ej: CORS_ORIGINS=https://192.168.40.4:4173
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      # Cobros PRO (Wompi). Vacio = cobro deshabilitado y la app sigue igual.
+      # WOMPI_EVENTS_SECRET es lo que separa un webhook real de uno forjado:
+      # sin el, cualquiera que conozca la URL podria activarse PRO.
+      WOMPI_PUBLIC_KEY: ${WOMPI_PUBLIC_KEY:-}
+      WOMPI_EVENTS_SECRET: ${WOMPI_EVENTS_SECRET:-}
+      WOMPI_ENLACE_PRO: ${WOMPI_ENLACE_PRO:-}
+      PRO_PRECIO_MES: ${PRO_PRECIO_MES:-15000}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:

@@ -23,6 +23,10 @@ class User(UUIDBase):
     usa_quincena: Mapped[bool] = mapped_column(Boolean, default=False)
     foto_url: Mapped[str | None] = mapped_column(Text, nullable=True)  # avatar data-URL
     is_2fa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Numero de WhatsApp, solo digitos con codigo de pais (573001234567).
+    # UNIQUE y opcional: un numero no puede pertenecer a dos cuentas, pero la
+    # mayoria entra por la PWA y no tiene por que darlo.
+    telefono: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True, index=True)
     onboarding_done: Mapped[bool] = mapped_column(Boolean, default=False)
     # Consentimiento legal (Ley 1581 de 2012). NULL = versión anterior, se pide al entrar.
     acepta_terminos_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

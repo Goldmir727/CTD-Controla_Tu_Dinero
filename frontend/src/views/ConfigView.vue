@@ -1,6 +1,6 @@
 <template>
   <main class="page">
-    <h2>AJUSTES</h2>
+    <div class="eyebrow">AJUSTES</div>
 
     <div class="eyebrow">MI CUENTA</div>
     <button class="item" @click="toggle('perfil')">
@@ -298,9 +298,9 @@
     <button class="item" @click="$router.push('/datos')"><span>Política de Datos</span><span>›</span></button>
     <button class="item" @click="$router.push('/cookies')"><span>Política de Cookies</span><span>›</span></button>
 
-    <button class="btn-logout" :disabled="busy.logout" @click="logout">
-      <span v-if="busy.logout" class="spinner"></span>Cerrar sesión
-    </button>
+<button class="btn-danger" :disabled="busy.logout" @click="logout">
+        <span v-if="busy.logout" class="spinner"></span>Cerrar sesión
+      </button>
   </main>
 </template>
 
@@ -723,9 +723,9 @@ onMounted(async () => {
 
 <style>
 .eyebrow{margin:18px 0 6px}
-.item{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:12px 2px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.item{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:12px 16px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
 .item small{opacity:.65}
-.panel{display:grid;gap:10px;padding:12px 2px 16px;border-bottom:1px solid var(--line)}
+.panel{display:grid;gap:10px;padding:12px 16px 16px;border-bottom:1px solid var(--line)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}
 .row2 .input,.row2 .chip{flex:1;min-width:120px}
 .line{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}

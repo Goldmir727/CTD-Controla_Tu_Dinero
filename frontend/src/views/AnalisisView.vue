@@ -228,7 +228,7 @@ const opcionCalendario = computed(() => {
         <strong>Reportes detallados · PRO</strong>
         <p>{{ mensajePro || 'Activa tu plan PRO para ver fijos, calendario y comparativas completas.' }}</p>
       </div>
-      <button class="btn-mint" @click="$router.push('/config')">Ver plan</button>
+      <button class="btn-mint" @click="$router.push('/pro')">Ver plan</button>
     </div>
 
     <div v-if="cargando" class="skel" style="height: 120px"></div>

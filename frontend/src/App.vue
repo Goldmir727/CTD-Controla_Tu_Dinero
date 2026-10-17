@@ -5,7 +5,7 @@
       <strong>CTD</strong>
       <span style="flex: 1"></span>
       <span data-tour="perfil" style="display:flex"><SelectorPerfil v-if="authed" @cambio="tick++" /></span>
-      <button v-if="showHeaderCta" class="btn-new desktop-only" data-tour="nuevo-movimiento" @click="$router.push('/movimientos/nuevo')">+ Nuevo movimiento</button>
+      <button v-if="showHeaderCta" class="btn-primary desktop-only" data-tour="nuevo-movimiento" @click="$router.push('/movimientos/nuevo')">+ Nuevo movimiento</button>
       <button v-if="isLanding && !authed" class="btn-ghost" @click="$router.push('/login')">Entrar</button>
       <button v-if="authed" class="gear" @click="abrirAyuda" aria-label="Ayuda" title="Ayuda"><i class="bi bi-question-lg"></i></button>
       <button v-if="authed" class="gear" data-tour="ajustes" @click="$router.push('/config')" aria-label="Ajustes"><i class="bi bi-gear"></i></button>
@@ -182,7 +182,6 @@ function go(tipo: string) { fan.value = false; router.push({ path: '/movimientos
 
 <style>
 .topbar { display: flex; align-items: center; gap: 8px; max-width: 720px; margin: 0 auto; padding: 12px 16px; }
-.btn-new { background: var(--mint); color: var(--navy); border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 800; }
 .gear { background: none; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 18px; cursor: pointer; }
 /* Única acción primaria por contexto: FAB solo móvil, botón header solo escritorio */
 @media (max-width: 899px) { .desktop-only { display: none; } }
