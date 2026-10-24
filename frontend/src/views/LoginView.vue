@@ -36,7 +36,7 @@
           </div>
         </div>
         <button class="btn-primary" :disabled="loading">{{ loading ? 'Entrando…' : 'Entrar' }}</button>
-        <p v-if="error" class="alert">{{ error }}</p>
+        <p v-if="error" class="alert" role="alert" aria-live="assertive">{{ error }}</p>
       </form>
 <p class="sub" style="text-align: center; margin-top: 16px">¿Sin cuenta? <a href="#" @click.prevent="$router.push('/registro')">Crear cuenta</a></p>
     </section>

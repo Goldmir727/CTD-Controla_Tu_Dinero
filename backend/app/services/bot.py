@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 from app.core.plan import consumo_captura, consumir_captura, es_pro
 from app.models.billing import Suscripcion  # noqa: F401  (registro de planes)
 from app.models.finance import Category, Transaction
+from app.services import recurrencia as recu
 from app.models.perfil import Perfil
 from app.models.user import User
 from app.models.whatsapp import WhatsappSesion, WhatsappVinculo
@@ -151,7 +152,11 @@ def _linea_movimiento(i: int, m: dict) -> str:
     if m.get("metodo"):
         extra.append(m["metodo"])
     if m.get("fijo"):
-        extra.append("fijo")
+        # "cada domingo" dice mas que "semanal": el usuario reconoce su pago.
+        if m.get("frecuencia") == "semanal" and m.get("dia_semana") is not None:
+            extra.append("fijo " + recu.etiqueta("semanal", 1, m["dia_semana"]))
+        else:
+            extra.append("fijo" + (" " + m["frecuencia"] if m.get("frecuencia") in ("quincenal", "semanal") else ""))
     return base + ("  · " + " · ".join(extra) if extra else "")
 
 
@@ -171,7 +176,7 @@ def _preguntar_fijos(p: dict) -> str:
         for c in (m.get("coincidencias") or [])[:1]:
             lineas.append(
                 f"{i+1}. Puede ser tu \"{c['nombre']}\" de siempre "
-                f"({_dinero(float(c['monto']))}, día {c['dia']}). "
+                f"({_dinero(float(c['monto']))}, {c.get('etiqueta') or ('día ' + str(c['dia']))}). "
                 f"Responde \"{i+1} es el mismo\" o \"{i+1} es otro\"."
             )
     return "\n\n".join(lineas)

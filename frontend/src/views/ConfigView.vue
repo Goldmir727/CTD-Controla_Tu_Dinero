@@ -19,22 +19,22 @@
           <button v-if="me.foto_url" class="link" @click="quitarFoto">Quitar</button>
         </div>
         <input ref="fotoInput" type="file" accept="image/*" hidden @change="elegirFoto" />
-        <p v-if="err.foto" class="alert">{{ err.foto }}</p>
+        <p v-if="err.foto" class="alert" role="alert" aria-live="assertive">{{ err.foto }}</p>
       </div>
-      <input v-model="nombreEdit" placeholder="Nombre" class="input" />
+      <input v-model="nombreEdit" placeholder="Nombre" aria-label="Nombre" class="input" />
       <button class="btn-mint" :disabled="busy.perfil" @click="guardarPerfil">
         <span v-if="busy.perfil" class="spinner"></span>Guardar nombre
       </button>
-      <p v-if="msg.perfil" class="ok">{{ msg.perfil }}</p>
+      <p v-if="msg.perfil" class="ok" role="status" aria-live="polite">{{ msg.perfil }}</p>
       <hr class="divider" />
       <div class="eyebrow">CAMBIAR CORREO</div>
-      <input v-model="correoNuevo" type="email" placeholder="Nuevo correo" class="input" />
-      <input v-model="correoPass" type="password" placeholder="Confirma tu contraseña" class="input" />
+      <input v-model="correoNuevo" type="email" placeholder="Nuevo correo" aria-label="Nuevo correo" class="input" />
+      <input v-model="correoPass" type="password" placeholder="Confirma tu contraseña" aria-label="Confirma tu contraseña" class="input" />
       <button class="btn-mint" :disabled="busy.correo" @click="cambiarCorreo">
         <span v-if="busy.correo" class="spinner"></span>Cambiar correo
       </button>
-      <p v-if="msg.correo" class="ok">{{ msg.correo }}</p>
-      <p v-if="err.correo" class="alert">{{ err.correo }}</p>
+      <p v-if="msg.correo" class="ok" role="status" aria-live="polite">{{ msg.correo }}</p>
+      <p v-if="err.correo" class="alert" role="alert" aria-live="assertive">{{ err.correo }}</p>
       <hr class="divider" />
       <div class="eyebrow">CAMBIAR CONTRASEÑA</div>
       <p class="sub">Te enviamos un código de 10 dígitos a {{ me.correo }}.</p>
@@ -42,14 +42,14 @@
         <span v-if="busy.pw" class="spinner"></span>Enviar código
       </button>
       <input v-model="pw.code" inputmode="numeric" autocomplete="one-time-code" maxlength="10"
-        placeholder="Código de 10 dígitos" class="input" style="letter-spacing: 0.25em; text-align: center" />
-      <input v-model="pw.nueva" type="password" minlength="8" placeholder="Nueva contraseña (8+)" class="input" />
-      <input v-model="pw.conf" type="password" placeholder="Repite la nueva contraseña" class="input" />
+        placeholder="Código de 10 dígitos" aria-label="Código de 10 dígitos" class="input" style="letter-spacing: 0.25em; text-align: center" />
+      <input v-model="pw.nueva" type="password" minlength="8" placeholder="Nueva contraseña (8+)" aria-label="Nueva contraseña" class="input" />
+      <input v-model="pw.conf" type="password" placeholder="Repite la nueva contraseña" aria-label="Repite la nueva contraseña" class="input" />
       <button class="btn-mint" :disabled="busy.pw" @click="confirmarPassword">
         <span v-if="busy.pw" class="spinner"></span>Guardar contraseña
       </button>
-      <p v-if="msg.pw" class="ok">{{ msg.pw }}</p>
-      <p v-if="err.pw" class="alert">{{ err.pw }}</p>
+      <p v-if="msg.pw" class="ok" role="status" aria-live="polite">{{ msg.pw }}</p>
+      <p v-if="err.pw" class="alert" role="alert" aria-live="assertive">{{ err.pw }}</p>
     </div>
 
     <div class="eyebrow">PREFERENCIAS</div>
@@ -87,8 +87,8 @@
       </p>
       <button :class="['chip', !me.usa_quincena ? 'on' : '']" @click="setPeriodo(false)">Por mes</button>
       <button :class="['chip', me.usa_quincena ? 'on' : '']" @click="setPeriodo(true)">Por quincena</button>
-      <p v-if="msg.periodo" class="sub" style="flex-basis: 100%">{{ msg.periodo }}</p>
-      <p v-if="err.periodo" class="alert" style="flex-basis: 100%">{{ err.periodo }}</p>
+      <p v-if="msg.periodo" class="sub" role="status" aria-live="polite" style="flex-basis: 100%">{{ msg.periodo }}</p>
+      <p v-if="err.periodo" class="alert" role="alert" aria-live="assertive" style="flex-basis: 100%">{{ err.periodo }}</p>
     </div>
     <button class="item" @click="toggle('semana')"><span>Inicio de semana</span><span>{{ semana }} ›</span></button>
     <div v-if="open === 'semana'" class="panel row2">
@@ -103,31 +103,31 @@
         <span>{{ c.nombre }} <small>· {{ c.tipo }} · ${{ fmt(c.saldo_actual) }}</small></span>
         <button class="btn-ghost" :disabled="busy.cuentas" @click="borrarCuenta(c.id)">Borrar</button>
       </div>
-      <input v-model="nc.nombre" placeholder="Nueva cuenta (Ej. Banco)" class="input" />
+      <input v-model="nc.nombre" placeholder="Nueva cuenta (Ej. Banco)" aria-label="Nombre de la nueva cuenta" class="input" />
       <div class="row2">
-        <select v-model="nc.tipo" class="input">
+        <select v-model="nc.tipo" class="input" aria-label="Tipo de cuenta">
           <option value="efectivo">Efectivo</option><option value="banco">Banco</option>
           <option value="bolsa">Bolsa</option><option value="otro">Otro</option>
         </select>
-        <NumeroInput v-model="nc.saldo" placeholder="$ inicial" />
+        <NumeroInput v-model="nc.saldo" placeholder="$ inicial" aria-label="Saldo inicial" />
       </div>
       <button class="btn-mint" :disabled="busy.cuentas" @click="crearCuenta">
         <span v-if="busy.cuentas" class="spinner"></span>Crear cuenta
       </button>
       <p class="sub">¿Viene del “todo junto” y quieres separar? Crea la cuenta aquí restando del origen, sin hacer cuentas:</p>
       <div class="row2">
-        <select v-model="div.origen" class="input">
+        <select v-model="div.origen" class="input" aria-label="Cuenta de origen">
           <option value="" disabled>Restar de…</option>
           <option v-for="c in cuentas" :key="c.id" :value="c.id">{{ c.nombre }} (${{ fmt(c.saldo_actual) }})</option>
         </select>
-        <NumeroInput v-model="div.monto" placeholder="$ a mover" />
+        <NumeroInput v-model="div.monto" placeholder="$ a mover" aria-label="Monto a mover" />
       </div>
-      <input v-model="div.nombre" placeholder="Nombre nueva cuenta" class="input" />
+      <input v-model="div.nombre" placeholder="Nombre nueva cuenta" aria-label="Nombre de la nueva cuenta" class="input" />
       <button class="btn-ghost" :disabled="busy.cuentas" @click="dividirCuenta">
         <span v-if="busy.cuentas" class="spinner"></span>Crear restando del origen
       </button>
-      <p v-if="msg.cuentas" class="ok">{{ msg.cuentas }}</p>
-      <p v-if="err.cuentas" class="alert">{{ err.cuentas }}</p>
+      <p v-if="msg.cuentas" class="ok" role="status" aria-live="polite">{{ msg.cuentas }}</p>
+      <p v-if="err.cuentas" class="alert" role="alert" aria-live="assertive">{{ err.cuentas }}</p>
     </div>
 
     <button class="item" @click="toggle('cats')"><span>Categorías ({{ cats.length }})</span><span>›</span></button>
@@ -139,13 +139,13 @@
         </span>
       </div>
       <div class="row2">
-        <input v-model="ncat.nombre" placeholder="Nueva categoría" class="input" />
-        <select v-model="ncat.tipo" class="input"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option><option value="ambos">Ambos</option></select>
+        <input v-model="ncat.nombre" placeholder="Nueva categoría" aria-label="Nombre de la nueva categoría" class="input" />
+        <select v-model="ncat.tipo" class="input" aria-label="Tipo de categoría"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option><option value="ambos">Ambos</option></select>
       </div>
       <button class="btn-mint" :disabled="busy.cats" @click="crearCat">
         <span v-if="busy.cats" class="spinner"></span>Crear categoría
       </button>
-      <p v-if="err.cats" class="alert">{{ err.cats }}</p>
+      <p v-if="err.cats" class="alert" role="alert" aria-live="assertive">{{ err.cats }}</p>
     </div>
 
     <button class="item" @click="toggle('metodos')"><span>Métodos de pago ({{ metodos.length }})</span><span>›</span></button>
@@ -155,12 +155,12 @@
         <button class="btn-ghost" @click="borrarMetodo(m.id)">Borrar</button>
       </div>
       <div class="row2">
-        <input v-model="nmet" placeholder="Nuevo método" class="input" />
+        <input v-model="nmet" placeholder="Nuevo método" aria-label="Nombre del nuevo método de pago" class="input" />
         <button class="btn-mint" :disabled="busy.metodos" @click="crearMetodo">
           <span v-if="busy.metodos" class="spinner"></span>Crear
         </button>
       </div>
-      <p v-if="err.metodos" class="alert">{{ err.metodos }}</p>
+      <p v-if="err.metodos" class="alert" role="alert" aria-live="assertive">{{ err.metodos }}</p>
     </div>
 
     <div class="eyebrow">DATOS Y SEGURIDAD</div>
@@ -188,14 +188,14 @@
         <button class="btn-mint" :disabled="busy.respaldo" @click="exportar">
           <span v-if="busy.respaldo" class="spinner"></span>Exportar JSON
         </button>
-        <select v-model="impModo" class="input"><option value="agregar">Agregar</option><option value="reemplazar">Reemplazar</option></select>
+        <select v-model="impModo" class="input" aria-label="Modo de importación"><option value="agregar">Agregar</option><option value="reemplazar">Reemplazar</option></select>
       </div>
-      <input type="file" accept=".json" @change="importar" :disabled="busy.respaldo" />
-      <input type="file" accept=".xlsx" @change="importarExcel" :disabled="busy.respaldo" />
-      <p v-if="msg.respaldo" class="ok">{{ msg.respaldo }}</p>
-      <p v-if="err.respaldo" class="alert">{{ err.respaldo }}</p>
-      <p v-if="msg.excel" class="ok">{{ msg.excel }}</p>
-      <p v-if="err.excel" class="alert">{{ err.excel }}</p>
+      <input type="file" accept=".json" aria-label="Importar respaldo JSON" @change="importar" :disabled="busy.respaldo" />
+      <input type="file" accept=".xlsx" aria-label="Importar respaldo Excel" @change="importarExcel" :disabled="busy.respaldo" />
+      <p v-if="msg.respaldo" class="ok" role="status" aria-live="polite">{{ msg.respaldo }}</p>
+      <p v-if="err.respaldo" class="alert" role="alert" aria-live="assertive">{{ err.respaldo }}</p>
+      <p v-if="msg.excel" class="ok" role="status" aria-live="polite">{{ msg.excel }}</p>
+      <p v-if="err.excel" class="alert" role="alert" aria-live="assertive">{{ err.excel }}</p>
     </div>
 
     <div class="item" style="cursor: default">
@@ -207,7 +207,7 @@
         <span v-if="busy.twofa" class="spinner"></span>Desactivar
       </button>
     </div>
-    <p v-if="err.twofa" class="alert">{{ err.twofa }}</p>
+    <p v-if="err.twofa" class="alert" role="alert" aria-live="assertive">{{ err.twofa }}</p>
 
     <button class="item" @click="toggle('whatsapp')">
       <span>Registrar por WhatsApp<small v-if="waVinculado">Conectado al {{ waTelefono }}</small><small v-else>Escribe o dicta tus gastos desde WhatsApp</small></span>
@@ -239,7 +239,7 @@
           <span v-if="waEnviado" class="spinner"></span>
           {{ waEnviado ? 'Código enviado…' : 'Enviarme un código' }}
         </button>
-        <p v-if="msg.wa" class="sub">{{ msg.wa }}</p>
+        <p v-if="msg.wa" class="sub" role="status" aria-live="polite">{{ msg.wa }}</p>
         <template v-if="waEnviado">
           <div class="field" style="margin-top: 10px">
             <label for="wa-cod">Código de 6 dígitos</label>
@@ -249,7 +249,7 @@
         </template>
       </template>
 
-      <p v-if="err.wa" class="alert">{{ err.wa }}</p>
+      <p v-if="err.wa" class="alert" role="alert" aria-live="assertive">{{ err.wa }}</p>
     </div>
 
     <div class="eyebrow">ZONA DE PELIGRO</div>
@@ -263,7 +263,7 @@
         <button class="btn-ghost" @click="armado = false">No</button>
       </span>
     </div>
-    <p v-if="err.reset" class="alert">{{ err.reset }}</p>
+    <p v-if="err.reset" class="alert" role="alert" aria-live="assertive">{{ err.reset }}</p>
 
     <div class="eyebrow">APP</div>
     <div class="item" style="cursor: default">
@@ -316,8 +316,11 @@ import { useTema } from '../composables/useTema'
 import { usePwaInstall } from '../composables/usePwaInstall'
 import { usePwaUpdate } from '../composables/usePwaUpdate'
 import { archivoADataURL } from '../composables/useFoto'
+import { confirmar } from '../composables/useConfirm'
+import { useToast } from '../composables/useToast'
 const router = useRouter()
 const auth = useAuth()
+const toast = useToast()
 const me = ref({ nombre: '', correo: '', moneda: 'COP', pais: 'CO', pais_nombre: 'Colombia', foto_url: null as string | null, usa_quincena: false })
 const fotoInput = ref<HTMLInputElement | null>(null)
 const cuentas = ref<{ id: string; nombre: string; tipo: string; saldo_actual: number }[]>([])
@@ -571,9 +574,9 @@ async function dividirCuenta() {
   } finally { busy.cuentas = false }
 }
 async function borrarCuenta(id: string) {
-  if (!confirm('¿Borrar cuenta? Solo vacías y sin movimientos.')) return
+  if (!(await confirmar({ titulo: '¿Borrar esta cuenta?', mensaje: 'Solo se pueden borrar cuentas vacías y sin movimientos.', ok: 'Borrar', peligro: true }))) return
   busy.cuentas = true; err.cuentas = ''
-  try { await api.delete(`/cuentas/${id}`); await recargar() }
+  try { await api.delete(`/cuentas/${id}`); await recargar(); toast.mostrar('Cuenta borrada') }
   catch { err.cuentas = 'No se puede borrar: transfiere o elimina movimientos primero.' }
   finally { busy.cuentas = false }
 }
@@ -723,25 +726,25 @@ onMounted(async () => {
 
 <style>
 .eyebrow{margin:18px 0 6px}
-.item{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;padding:12px 16px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
-.item small{opacity:.65}
+.item{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;min-height:48px;padding:12px 16px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.item small{color:var(--ink-soft);font-size:12px}
 .panel{display:grid;gap:10px;padding:12px 16px 16px;border-bottom:1px solid var(--line)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}
 .row2 .input,.row2 .chip{flex:1;min-width:120px}
 .line{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}
-.line small{opacity:.65}
+.line small{color:var(--ink-soft);font-size:12px}
 /* .chip vive en tokens.css */
-.pro-enlace { display: inline; margin-left: 4px; padding: 0; font-weight: 700; color: var(--mint-dark); }
-.ok{color:#00B37A;font-size:13px}
-.sub{font-size:13px;opacity:.65}
-.btn-logout{margin-top:16px;width:100%;padding:14px;border-radius:14px;background:var(--surface);color:var(--danger);border:1px solid var(--danger);font-weight:800;cursor:pointer}
+.pro-enlace { display: inline; margin-left: 4px; padding: 0; font-weight: 700; color: var(--mint-text); }
+.ok{color:var(--mint-text);font-size:13px}
+.sub{font-size:13px;color:var(--ink-soft)}
+.btn-logout{margin-top:16px;width:100%;min-height:44px;padding:14px;border-radius:14px;background:var(--surface);color:var(--danger-text);border:1px solid var(--danger);font-weight:800;cursor:pointer}
 .btn-logout:disabled{opacity:.6;cursor:wait}
-.candado{display:flex;gap:6px;align-items:flex-start;margin:0;color:var(--warning);opacity:1;font-size:12.5px;line-height:1.45}
+.candado{display:flex;gap:6px;align-items:flex-start;margin:0;color:var(--warning-text);opacity:1;font-size:12.5px;line-height:1.45}
 .candado i{margin-top:2px;flex:none}
 .tour-item{align-items:center;cursor:default}
-.tour-item small{display:block;opacity:.65;font-size:12px;margin-top:2px}
+.tour-item small{display:block;color:var(--ink-soft);font-size:12px;margin-top:2px}
 /* Sin min-width:0 el <span> no baja de su ancho intrinseco y el texto se
    recorta en vez de envolver; el boton conserva su ancho con .mini{flex:none}. */
 .tour-text{min-width:0}
-.mini{padding:7px 14px;font-size:13px;flex:none}
+.mini{min-height:44px;padding:7px 14px;font-size:13px;flex:none}
 </style>

@@ -11,29 +11,41 @@
       <button v-if="authed" class="gear" data-tour="ajustes" @click="$router.push('/config')" aria-label="Ajustes"><i class="bi bi-gear"></i></button>
     </header>
     <router-view :key="tick" />
-    <CapturaRapida @guardado="refrescarTrasCaptura" />
+    <CapturaRapida ref="captura" @guardado="refrescarTrasCaptura" />
     <TourGuias ref="tour" :pais="ctxPais" />
     <InstallPrompt v-if="authed" />
     <UpdateBanner />
     <CookieBanner />
     <ConsentBanner />
-    <div v-if="fan" class="fan-backdrop" @click="fan = false">
-      <div class="fan" @click.stop>
-        <button @click="go('ingreso')">+ Ingreso</button>
-        <button @click="go('gasto')">− Gasto</button>
+    <ConfirmDialog />
+    <ToastStack />
+    <!-- Un solo panel para las tres formas de registrar. Antes la captura por
+         voz vivía en una pastilla flotante aparte: dos acciones primarias
+         peleando por el mismo pulgar. -->
+    <div v-if="fan" class="fan-backdrop" @click.self="fan = false">
+      <div ref="fanEl" class="fan" role="dialog" aria-modal="true" aria-labelledby="fan-titulo" @click.stop>
+        <p id="fan-titulo" class="fan-titulo">Registrar</p>
+        <button class="fan-captura" data-autofocus @click="pedirCaptura">
+          <i class="bi bi-magic" aria-hidden="true"></i> Dictar o escribir
+        </button>
+        <div class="fan-tipos">
+          <button @click="go('ingreso')">+ Ingreso</button>
+          <button @click="go('gasto')">− Gasto</button>
+        </div>
       </div>
     </div>
-    <button v-if="showFab" class="fab" data-tour="nuevo-movimiento" @click="fan = true">+</button>
-    <nav v-if="authed" class="bottom-nav" data-tour="nav">
+    <button v-if="showFab" class="fab" data-tour="captura" aria-label="Registrar movimiento" @click="fan = true">+</button>
+    <nav v-if="authed" class="bottom-nav" data-tour="nav" aria-label="Navegación principal">
       <div class="nav-side">
-        <router-link to="/inicio">Inicio</router-link>
-        <router-link to="/movimientos">Movs</router-link>
+        <router-link to="/inicio"><i class="bi bi-house" aria-hidden="true"></i><span>Inicio</span></router-link>
+        <router-link to="/movimientos" aria-label="Movimientos"><i class="bi bi-list-ul" aria-hidden="true"></i><span>Movs</span></router-link>
+        <router-link to="/agenda" aria-label="Calendario"><i class="bi bi-calendar3" aria-hidden="true"></i><span>Agenda</span></router-link>
       </div>
       <span class="fab-gap"></span>
       <div class="nav-side">
-        <router-link to="/plan">Plan</router-link>
-        <router-link to="/analisis">Datos</router-link>
-        <router-link to="/asesor">Asesor</router-link>
+        <router-link to="/plan"><i class="bi bi-bullseye" aria-hidden="true"></i><span>Plan</span></router-link>
+        <router-link to="/analisis" aria-label="Análisis y datos"><i class="bi bi-bar-chart" aria-hidden="true"></i><span>Datos</span></router-link>
+        <router-link to="/asesor"><i class="bi bi-chat-dots" aria-hidden="true"></i><span>Asesor</span></router-link>
       </div>
     </nav>
   </div>
@@ -46,6 +58,8 @@ import InstallPrompt from './components/InstallPrompt.vue'
 import UpdateBanner from './components/UpdateBanner.vue'
 import CookieBanner from './components/CookieBanner.vue'
 import ConsentBanner from './components/ConsentBanner.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
+import ToastStack from './components/ToastStack.vue'
 import CapturaRapida from './components/CapturaRapida.vue'
 import TourGuias from './components/TourGuias.vue'
 import SelectorPerfil from './components/SelectorPerfil.vue'
@@ -53,6 +67,8 @@ import Logo from './components/Logo.vue'
 import api from './services/api'
 import { useAuth } from './stores/auth'
 import { useTema } from './composables/useTema'
+import { useDialog } from './composables/useDialog'
+import { responderConfirm } from './composables/useConfirm'
 import { configurarFormato, usarPorDefecto } from './utils/formato'
 const route = useRoute()
 
@@ -66,6 +82,9 @@ function refrescarTrasCaptura(n: number) {
 const router = useRouter()
 const auth = useAuth()
 const fan = ref(false)
+const fanEl = ref<HTMLElement | null>(null)
+const captura = ref<InstanceType<typeof CapturaRapida> | null>(null)
+useDialog(computed(() => fan.value), fanEl, () => { fan.value = false })
 const authed = computed(() => auth.isAuthed)
 const isLanding = computed(() => route.path === '/')
 let ultimaCheck = 0
@@ -89,6 +108,9 @@ async function validarSesion(forzar = false) {
 }
 
 function onSesionCerrada() {
+  // Cualquier confirmación pendiente se cancela: si no, quedaría un diálogo
+  // de borrado abierto sobre la landing, esperando una respuesta imposible.
+  responderConfirm(false)
   auth.clear()
   aLanding()
 }
@@ -178,17 +200,51 @@ onUnmounted(() => {
 const showHeaderCta = computed(() => authed.value && ['/inicio', '/movimientos'].includes(route.path))
 const showFab = computed(() => authed.value && !['/', '/login', '/registro', '/onboarding', '/2fa', '/movimientos/nuevo'].includes(route.path))
 function go(tipo: string) { fan.value = false; router.push({ path: '/movimientos/nuevo', query: { tipo } }) }
+function pedirCaptura() { fan.value = false; captura.value?.abrir() }
 </script>
 
 <style>
-.topbar { display: flex; align-items: center; gap: 8px; max-width: 720px; margin: 0 auto; padding: 12px 16px; }
-.gear { background: none; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 18px; cursor: pointer; }
+.topbar {
+  display: flex; align-items: center; gap: 8px; max-width: 720px; margin: 0 auto;
+  padding: calc(12px + var(--safe-top)) 16px 12px;
+}
+.gear {
+  background: none; border: 1px solid var(--line); border-radius: 12px;
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; cursor: pointer; flex: none;
+}
+.gear:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, 0.25); }
+/* En un móvil de 360px el logo + CTD + perfil + dos botones no caben: el
+   wordmark es lo primero que se puede quitar sin perder navegación. */
+@media (max-width: 380px) { .topbar > strong { display: none; } }
 /* Única acción primaria por contexto: FAB solo móvil, botón header solo escritorio */
-@media (max-width: 899px) { .desktop-only { display: none; } }
+/* `.topbar .desktop-only` y no `.desktop-only`: tokens.css se importa después
+   y su `.btn-primary { display: inline-flex }` (misma especificidad) volvía a
+   mostrar este botón en móvil, robando 132px y desbordando la cabecera. */
+@media (max-width: 899px) { .topbar .desktop-only { display: none; } }
 @media (min-width: 900px) { .fab { display: none; } }
-.fan-backdrop { position: fixed; inset: 0; background: rgba(5,11,59,.45); z-index: 30; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 170px; }
-.fan { display: grid; gap: 8px; }
-.fan button { background: var(--navy); color: #fff; border: 1px solid var(--mint); border-radius: 14px; padding: 12px 22px; font-weight: 700; }
+.fan-backdrop {
+  position: fixed; inset: 0; background: rgba(5, 11, 59, .55); z-index: var(--z-sheet);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 12px; padding-bottom: calc(12px + var(--safe-bottom));
+}
+.fan {
+  width: 100%; max-width: 480px; display: grid; gap: 10px;
+  background: var(--surface); color: var(--ink);
+  border-radius: 20px; padding: 16px; box-shadow: var(--shadow);
+}
+.fan-titulo { margin: 0 0 2px; font-size: 12px; letter-spacing: .12em; font-weight: 700; color: var(--ink-soft); }
+.fan-captura {
+  min-height: 52px; border: 0; border-radius: 14px; cursor: pointer;
+  background: var(--mint); color: var(--navy); font: 800 15px var(--font);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.fan-tipos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fan-tipos button {
+  background: var(--navy); color: #fff; border: 1px solid var(--mint); border-radius: 14px;
+  padding: 12px; min-height: 52px; font-weight: 700; cursor: pointer;
+}
+.fan button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, .35); }
 
 /* Escritorio: la cabecera sigue al contenido y se corre a un lado de la
    columna de navegación. Va aquí y no en tokens.css porque la regla base de

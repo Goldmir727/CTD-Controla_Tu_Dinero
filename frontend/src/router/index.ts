@@ -13,6 +13,7 @@ const router = createRouter({
     { path: '/2fa', component: () => import('../views/TwoFaView.vue') },
     { path: '/inicio', component: () => import('../views/DashboardView.vue') },
     { path: '/movimientos', component: () => import('../views/MovimientosView.vue') },
+    { path: '/agenda', component: () => import('../views/AgendaView.vue') },
     { path: '/movimientos/nuevo', component: () => import('../views/NuevoMovimientoView.vue') },
     { path: '/plan', component: () => import('../views/PlanView.vue') },
     { path: '/analisis', component: () => import('../views/AnalisisView.vue') },

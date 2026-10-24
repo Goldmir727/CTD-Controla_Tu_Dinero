@@ -12,6 +12,7 @@ import { computed, ref } from 'vue'
 import api from '../services/api'
 import { dinero, numero } from '../utils/formato'
 import { useAuth } from '../stores/auth'
+import { useDialog } from '../composables/useDialog'
 
 type Coincidencia = {
   id: string
@@ -19,6 +20,8 @@ type Coincidencia = {
   tipo: 'gasto' | 'ingreso'
   monto: number
   dia: number
+  dia_semana?: number | null
+  etiqueta?: string | null
   frecuencia: string
   confianza: number
   motivo: string
@@ -37,6 +40,11 @@ type Mov = {
   metodo: string | null
   fecha: string
   fijo: boolean
+  /** Frecuencia que la frase declaro ("cada quincena") y dia de caida del fijo. */
+  frecuencia?: 'mensual' | 'quincenal' | 'semanal' | null
+  dia_fijo?: number | null
+  /** Dia de la semana del fijo semanal: 0=lunes .. 6=domingo ("cada domingo"). */
+  dia_semana?: number | null
   /** Fijos declarados que PODRIAN ser este movimiento. La UI pregunta. */
   coincidencias?: Coincidencia[]
   /** Que eligio el usuario: un id de fijo, 'nuevo' o null (nada). */
@@ -61,10 +69,13 @@ type Propuesta = {
 const emit = defineEmits<{ (e: 'guardado', n: number): void }>()
 
 const abierto = ref(false)
+const sheet = ref<HTMLElement | null>(null)
 const texto = ref('')
 const cargando = ref(false)
 const error = ref('')
 const propuesta = ref<Propuesta | null>(null)
+
+useDialog(abierto, sheet, () => cerrar())
 const guardarSiempre = ref(localStorage.getItem('ctd-captura-auto') === '1')
 const cuota = ref<{ queda: number; limite: number } | null>(null)
 
@@ -164,11 +175,38 @@ async function enviarAudio(blob: Blob) {
   }
 }
 
+/** Un movimiento crea un fijo cuando el usuario lo marca como repetido o dice
+ *  "es otro" frente a una coincidencia. Solo ahi importa la frecuencia. */
+function vaACrearFijo(m: Mov): boolean {
+  return (m.fijo && !m.coincidencias?.length) || m.eleccion === 'nuevo'
+}
+
+const FRECUENCIAS_FIJO = [
+  { valor: 'mensual', label: 'Cada mes' },
+  { valor: 'quincenal', label: 'Cada 15 días' },
+  { valor: 'semanal', label: 'Cada semana' },
+]
+// 0 = lunes ... 6 = domingo, igual que en el backend.
+const DIAS_SEMANA = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+
+// Al elegir "cada semana" hay que decir QUE dia: sin eso el fijo se ancla a un
+// dia del mes y al mes siguiente cae en cualquier dia. Se propone hoy y el
+// usuario lo cambia de un toque.
+function alElegirFrecuencia(m: Mov) {
+  if (m.frecuencia === 'semanal' && m.dia_semana == null) {
+    m.dia_semana = (new Date().getDay() + 6) % 7
+  }
+}
+
 function abrir() {
   abierto.value = true
   error.value = ''
   void cargarUso()
 }
+
+// En móvil la captura se abre desde el botón flotante (que es el único acceso
+// primario); la pastilla solo existe en escritorio, donde no hay FAB.
+defineExpose({ abrir })
 
 function cerrar() {
   abierto.value = false
@@ -201,6 +239,14 @@ async function analizar() {
   try {
     const { data } = await api.post<Propuesta>('/captura', { texto: t })
     propuesta.value = data
+    // Un semanal sin dia de la semana dejaria el select mostrando "lunes" con
+    // el modelo en null, y al guardar se anclaria al dia del mes. Se propone
+    // hoy para que lo que se ve sea lo que se guarda.
+    for (const m of data.movimientos) {
+      if (m.frecuencia === 'semanal' && m.dia_semana == null) {
+        m.dia_semana = (new Date().getDay() + 6) % 7
+      }
+    }
     // Atajo "guardar siempre": solo si NO hay montos que el modelo dedujo.
     if (guardarSiempre.value && !data.requiere_confirmacion_monto) {
       await confirmar()
@@ -249,7 +295,13 @@ async function confirmar() {
         // Sin respuesta no se manda nada y el gasto se guarda igual: perder el
         // enlace con el plan es mejor que frenar el registro del gasto.
         recurrente_id: m.eleccion && m.eleccion !== 'nuevo' ? m.eleccion : null,
-        nuevo_fijo: m.eleccion === 'nuevo'
+        nuevo_fijo: m.eleccion === 'nuevo',
+        // Solo se envia cuando el movimiento va a crear un fijo. Sin frecuencia
+        // elegida el backend asume mensual, como siempre.
+        frecuencia: vaACrearFijo(m) ? (m.frecuencia || 'mensual') : undefined,
+        dia_fijo: vaACrearFijo(m) ? (m.dia_fijo ?? undefined) : undefined,
+        dia_semana: vaACrearFijo(m) && m.frecuencia === 'semanal'
+          ? (m.dia_semana ?? undefined) : undefined
       }))
     })
     if (data.errores?.length) {
@@ -268,14 +320,20 @@ async function confirmar() {
 </script>
 
 <template>
-  <button v-if="authed && !abierto" class="pill-captura" data-tour="captura" @click="abrir">
+  <button v-if="authed && !abierto" class="pill-captura" data-tour="captura" aria-haspopup="dialog" @click="abrir">
     <i class="bi bi-magic"></i><span>Capturar</span>
   </button>
 
   <div v-if="abierto" class="cap-backdrop" @click.self="cerrar">
-    <div class="cap-sheet">
+    <div
+      ref="sheet"
+      class="cap-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cap-titulo"
+    >
       <div class="cap-head">
-        <strong>{{ propuesta ? 'Revisa antes de guardar' : 'Captura rápida' }}</strong>
+        <strong id="cap-titulo">{{ propuesta ? 'Revisa antes de guardar' : 'Captura rápida' }}</strong>
         <button class="x" aria-label="Cerrar" @click="cerrar"><i class="bi bi-x-lg"></i></button>
       </div>
 
@@ -289,8 +347,10 @@ async function confirmar() {
             v-model="texto"
             class="input"
             placeholder="Gasté 15 lucas en un corrientazo"
+            aria-label="Frase del movimiento"
+            enterkeyhint="send"
             maxlength="500"
-            autofocus
+            data-autofocus
             @keyup.enter="analizar"
           />
           <button
@@ -340,9 +400,10 @@ async function confirmar() {
               min="0"
               step="100"
               placeholder="Monto"
+              aria-label="Monto"
             />
           </div>
-          <select v-model="m.categoria_id" class="input">
+          <select v-model="m.categoria_id" class="input" aria-label="Categoría">
             <option :value="null" disabled>Categoría…</option>
             <option v-for="c in propuesta.opciones.categorias" :key="c.id" :value="c.id">
               {{ c.nombre }}
@@ -373,7 +434,27 @@ async function confirmar() {
           </label>
 
           <!--
-            El usuario ya declaró este fijo en /plan y ahora captura algo que se le
+            La frase puede traer la frecuencia ("cada quincena") y ya viene
+            elegida. Se puede corregir aqui mismo sin ir a los fijos después.
+          -->
+          <div v-if="vaACrearFijo(m)" class="fij-frec">
+            <select v-model="m.frecuencia" class="input" aria-label="Frecuencia del fijo"
+                    @change="alElegirFrecuencia(m)">
+              <option :value="null" disabled>¿Cada cuánto?</option>
+              <option v-for="f in FRECUENCIAS_FIJO" :key="f.valor" :value="f.valor">{{ f.label }}</option>
+            </select>
+            <!-- Semanal se elige por dia de la semana, no por dia del mes: "cada
+                 domingo" no es el 18. -->
+            <select v-if="m.frecuencia === 'semanal'" v-model.number="m.dia_semana"
+                    class="input dia" aria-label="Día de la semana en que cae">
+              <option v-for="(d, i) in DIAS_SEMANA" :key="d" :value="i">{{ d }}</option>
+            </select>
+            <input v-else v-model.number="m.dia_fijo" type="number" min="1" max="31" class="input dia"
+                   placeholder="Día" aria-label="Día del mes en que cae" />
+          </div>
+
+          <!--
+            El usuario ya declaró este fijo en Movimientos › Fijos y ahora captura algo que se le
             parece. La app NO decide: pregunta. Si ella eligiera sola se equivocaria
             en los dos sentidos (crear dos arriendos, o tomar el de siempre como
             si fuera otro) y el usuario perdería la confianza en el aviso.
@@ -382,7 +463,8 @@ async function confirmar() {
             <p class="coincide-preg">
               <i class="bi bi-arrow-repeat"></i>
               ¿Este es tu <strong>{{ m.coincidencias[0].nombre }}</strong> de siempre
-              ({{ dinero(m.coincidencias[0].monto) }}, día {{ m.coincidencias[0].dia }})?
+              ({{ dinero(m.coincidencias[0].monto) }},
+              {{ m.coincidencias[0].etiqueta || ('día ' + m.coincidencias[0].dia) }})?
               <span class="sub">{{ m.coincidencias[0].motivo }}</span>
             </p>
             <div class="coincide-botones">
@@ -395,6 +477,19 @@ async function confirmar() {
                 No, es otro
               </button>
               <button v-if="m.eleccion" class="link" @click="m.eleccion = null">Quitar</button>
+            </div>
+            <div v-if="m.eleccion === 'nuevo'" class="fij-frec">
+              <select v-model="m.frecuencia" class="input" aria-label="Frecuencia del fijo nuevo"
+                      @change="alElegirFrecuencia(m)">
+                <option :value="null" disabled>¿Cada cuánto?</option>
+                <option v-for="f in FRECUENCIAS_FIJO" :key="f.valor" :value="f.valor">{{ f.label }}</option>
+              </select>
+              <select v-if="m.frecuencia === 'semanal'" v-model.number="m.dia_semana"
+                      class="input dia" aria-label="Día de la semana en que cae">
+                <option v-for="(d, i) in DIAS_SEMANA" :key="d" :value="i">{{ d }}</option>
+              </select>
+              <input v-else v-model.number="m.dia_fijo" type="number" min="1" max="31" class="input dia"
+                     placeholder="Día" aria-label="Día del mes en que cae" />
             </div>
             <p v-if="m.eleccion === 'nuevo'" class="sub">
               Se creará un fijo nuevo con este movimiento, aparte de los que ya tienes.
@@ -417,7 +512,7 @@ async function confirmar() {
         <button class="btn-ghost full" @click="propuesta = null">Corregir la frase</button>
       </template>
 
-      <p v-if="error" class="alert">{{ error }}</p>
+      <p v-if="error" class="alert" role="alert" aria-live="assertive">{{ error }}</p>
     </div>
   </div>
 </template>
@@ -426,12 +521,13 @@ async function confirmar() {
 .pill-captura {
   position: fixed;
   right: 16px;
-  bottom: calc(96px + env(safe-area-inset-bottom));
-  z-index: 28;
+  bottom: calc(var(--fab-bottom) + var(--safe-bottom) + 4px);
+  z-index: var(--z-action);
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 12px 16px;
+  min-height: 44px;
   border: 0;
   border-radius: 999px;
   background: var(--navy);
@@ -441,22 +537,26 @@ async function confirmar() {
   cursor: pointer;
 }
 .pill-captura:active { transform: scale(.96); }
+/* Un solo acceso primario por pantalla: en móvil manda el FAB, que ofrece
+   dictar dentro del mismo panel. La pastilla se queda solo en escritorio, donde
+   el FAB no existe. */
+@media (max-width: 899px) { .pill-captura { display: none; } }
 
 .cap-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-sheet);
   background: rgba(5, 11, 59, .55);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding: 12px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  padding-bottom: calc(12px + var(--safe-bottom));
 }
 .cap-sheet {
   width: 100%;
   max-width: 480px;
-  max-height: 88vh;
+  max-height: 88dvh;
   overflow-y: auto;
   background: var(--surface);
   border-radius: 20px;
@@ -464,24 +564,29 @@ async function confirmar() {
   box-shadow: var(--shadow);
 }
 .cap-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.x { background: none; border: 0; font-size: 18px; color: var(--ink-soft); cursor: pointer; }
+.x {
+  background: none; border: 0; color: var(--ink-soft); cursor: pointer;
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+}
+.x:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, 0.25); }
 
 .fila-input { display: flex; gap: 8px; margin: 10px 0; }
 .fila-input .input { flex: 1; min-width: 0; }
 .mic {
-  width: 46px; border: 1px solid var(--line); background: var(--surface);
-  border-radius: 14px; font-size: 18px; color: var(--navy); cursor: pointer;
+  width: 46px; min-height: 44px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 14px; font-size: 18px; color: var(--ink); cursor: pointer;
 }
 .mic.on { background: var(--danger); border-color: var(--danger); color: #fff; }
 .mic:disabled { opacity: .5; }
-.grab { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--danger); margin: 0 0 8px; }
+.grab { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--danger-text); margin: 0 0 8px; }
 .grab .punto { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); animation: latido 1s infinite; }
 @keyframes latido { 50% { opacity: .25; } }
 
 .full { width: 100%; margin-top: 8px; }
 
-.auto { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13px; }
-.auto input { margin-top: 3px; }
+.auto { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13px; min-height: 44px; }
+.auto input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
 .auto span { display: flex; flex-direction: column; }
 .auto em { font-style: normal; color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
 .quota { margin-top: 10px; text-align: center; }
@@ -490,19 +595,23 @@ async function confirmar() {
 .prop.dudoso { border-color: var(--warning); background: rgba(216, 154, 39, .06); }
 .prop-top { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .tipo { font: 700 12px var(--font); padding: 4px 8px; border-radius: 8px; }
-.tipo.gasto { background: var(--danger-soft); color: var(--danger); }
-.tipo.ingreso { background: var(--mint-soft); color: var(--mint-dark); }
+.tipo.gasto { background: var(--danger-soft); color: var(--danger-text); }
+.tipo.ingreso { background: var(--mint-tint); color: var(--mint-text); }
 .monto { flex: 1; text-align: right; font-weight: 700; }
 .prop-meta { margin-top: 7px; font-size: 12px; color: var(--ink-soft); }
 .cap-fijo { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
-.cap-fijo input { margin: 0; accent-color: var(--mint-dark); }
-.warn { margin: 8px 0 0; font-size: 12px; color: var(--warning); font-weight: 600; }
+.cap-fijo { min-height: 44px; }
+.cap-fijo input { margin: 0; width: 20px; height: 20px; flex: none; accent-color: var(--mint-dark); }
+.fij-frec { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.fij-frec .input { flex: 1; min-width: 0; }
+.fij-frec .input.dia { flex: none; width: 86px; }
+.warn { margin: 8px 0 0; font-size: 12px; color: var(--warning-text); font-weight: 600; }
 .avisos { margin-top: 10px; font-size: 12px; color: var(--ink-soft); }
 .avisos p { margin: 4px 0; }
 .total { text-align: right; margin-top: 12px; }
   .coincide { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--mint-soft); }
   .coincide-preg { margin: 0; font-size: 13px; line-height: 1.45; }
-  .coincide-preg i { color: var(--mint-dark); margin-right: 4px; }
+  .coincide-preg i { color: var(--mint-text); margin-right: 4px; }
   .coincide-preg .sub { display: block; margin: 4px 0 0; font-size: 11.5px; }
   .coincide-botones { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
   .coincide .chip { padding: 6px 12px; font-size: 12.5px; }

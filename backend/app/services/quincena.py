@@ -15,7 +15,7 @@ Que responde:
 Todo se apoya en services/finanzas.py: la app no puede mostrar dos versiones de
 la misma cifra. Y todo lo predictivo va marcado como estimacion (RN-07).
 """
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from app.models.goals import Recurring
 from app.services import colombia as co
 from app.services import finanzas as fin
 from app.services import periodo as per
+from app.services import recurrencia as recu
 # Los mensajes van al chat y al PDF: si usan el formato ingles ("1,301,667") el
 # usuario lee otra cifra que la de la tabla de al lado ("$1.301.667").
 from app.services.formato import dinero
@@ -33,28 +34,15 @@ from app.services.formato import dinero
 DELTA_ALERTA = 20
 
 
-def _ocurrencias_en_quincena(dia: int, frecuencia: str, dia_inicio: int, dia_fin: int) -> int:
-    """Cuantas veces vence un gasto fijo entre dos dias del mes (inclusive).
+def _ocurrencias_de_un_fijo(r, desde: date, hasta: date) -> list[date]:
+    """Las fechas reales en que cae un fijo entre dos fechas.
 
-    Hay que contar sobre el rango real, no suponer "si es mensual, una vez": un
-    arriendo el dia 20 es de la segunda quincena y el del dia 5 de la primera, y
-    si se cuenta mal el fijo no aparece, que es como uno se entera de que le
-    falta plata el dia que ya se la gastó.
-
-    - mensual: vence el dia ``dia``.
-    - quincenal: cada 15 dias a partir de ``dia``.
-    - semanal: cada 7 dias a partir de ``dia``.
+    El conteo por dia del mes se equivocaba en dos casos que el usuario nota: un
+    semanal anclado al 18 solo aparecia el 18 y el 25 (dos veces), y un
+    quincenal con dia > 15 perdia la segunda ocurrencia porque el 35 no existe.
+    El calendario lo resuelve services/recurrencia.
     """
-    paso = {"mensual": 0, "quincenal": 15, "semanal": 7}.get(frecuencia)
-    if paso is None:
-        return 0
-    total = 0
-    for d in range(dia_inicio, dia_fin + 1):
-        if paso == 0:
-            total += 1 if d == dia else 0
-        elif d >= dia and (d - dia) % paso == 0:
-            total += 1
-    return total
+    return recu.ocurrencias(desde, hasta, r.frecuencia, r.dia, r.dia_semana)
 
 
 def fijos_del_periodo(db: Session, user_id: str, perfil_id: str, q: dict) -> dict:
@@ -64,18 +52,22 @@ def fijos_del_periodo(db: Session, user_id: str, perfil_id: str, q: dict) -> dic
     que un arriendo el dia 20 cuenta en el mes (una vez) y en la segunda quincena
     (una vez), no se inventa el "si es mensual, una vez".
     """
-    dia_inicio = int(q["inicio"][-2:])
-    dia_fin = int(q["fin"][-2:])
+    desde = date.fromisoformat(q["inicio"])
+    hasta = date.fromisoformat(q["fin"])
     filas = db.query(Recurring).filter_by(user_id=user_id, perfil_id=perfil_id, activo=True).all()
     detalle, total = [], 0.0
     for r in filas:
-        veces = _ocurrencias_en_quincena(r.dia, r.frecuencia, dia_inicio, dia_fin)
+        fechas = _ocurrencias_de_un_fijo(r, desde, hasta)
+        veces = len(fechas)
         if veces <= 0:
             continue
         monto = round(float(r.monto) * veces, 2)
         total = round(total + monto, 2)
         detalle.append({"nombre": r.nombre, "tipo": r.tipo, "monto": monto,
-                         "dia": r.dia, "veces": veces, "frecuencia": r.frecuencia})
+                         "dia": r.dia, "dia_semana": r.dia_semana, "veces": veces,
+                         "frecuencia": r.frecuencia,
+                         "etiqueta": recu.etiqueta(r.frecuencia, r.dia, r.dia_semana),
+                         "proxima": fechas[0].isoformat()})
     detalle.sort(key=lambda x: -x["monto"])
     return {"total": total, "items": detalle,
             "ingresos": round(sum(x["monto"] for x in detalle if x["tipo"] == "ingreso"), 2),

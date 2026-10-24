@@ -19,8 +19,8 @@ No es un contador de gastos: es el que te avisa **antes** de quedarte sin plata.
 | Pestaña | Para qué sirve |
 |---|---|
 | **Inicio** | Lo esencial: cuánto tienes y cómo vas esta quincena |
-| **Movs** | Todo lo registrado, editable |
-| **Plan** | Presupuestos, metas y gastos fijos |
+| **Movs** | Todo lo registrado, editable — y los **fijos** (ingresos y gastos que se repiten), en la pestaña Fijos |
+| **Plan** | Presupuestos y metas |
 | **Datos** | Tendencias y comparaciones mes a mes |
 | **Asesor** | Preguntas en español sobre **tus** números |
 
@@ -92,7 +92,7 @@ convierte entre monedas, cambia cómo se muestra.
 
 ---
 
-## 5. Plan: las tres cosas que puedes declarar
+## 5. Plan y Fijos: lo que puedes declarar
 
 **Presupuestos** — un tope por categoría y mes. La app avisa cuando vas más
 rápido de lo que el calendario permite, no solo cuando te pasaste.
@@ -101,9 +101,10 @@ rápido de lo que el calendario permite, no solo cuando te pasaste.
 
 **Metas** — para qué quieres el dinero. CTD calcula cuánto ahorrar por mes.
 
-**Fijos** — lo que siempre pagas: arriendo, internet, suscripción. Sirven para
-que el motor separe lo fijo de lo variable y no te diga "te alcanza" cuando no
-es cierto.
+**Fijos** (en **Movs › Fijos**) — lo que siempre entra o sale: arriendo,
+internet, suscripción, el sueldo. Se declara con su frecuencia: cada mes, cada
+15 días o cada semana. Sirven para que el motor separe lo fijo de lo variable y
+no te diga "te alcanza" cuando no es cierto.
 
 También se detectan solos: si registras "pagué el arriendo" y ya lo tienes
 declarado, te pregunta **"¿es el mismo o es uno distinto?"**. Tú respondes, la

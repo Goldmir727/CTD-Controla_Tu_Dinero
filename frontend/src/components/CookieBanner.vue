@@ -1,5 +1,5 @@
 <template>
-  <div v-if="visible" class="cookie-bar">
+  <div v-if="visible && slotVisible" class="cookie-bar floating-banner" role="region" aria-label="Aviso de cookies">
     <p><strong>Cookies necesarias.</strong> <span class="sub">Guardamos tu sesión y preferencias en este dispositivo. Sin rastreadores.</span>
       <a href="#" @click.prevent="$router.push('/cookies')">Ver política</a></p>
     <div class="row2">
@@ -9,8 +9,17 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref, watchEffect } from 'vue'
+import { useBannerSlot } from '../composables/useBannerSlot'
+
+const { visible: slotVisible, pedir } = useBannerSlot('cookies')
 const visible = ref(!localStorage.getItem('ctd-cookies'))
+
+// Solo se muestra si además le toca el hueco: así no se apila con el aviso de
+// actualización ni tapa la barra de navegación.
+watchEffect(() => pedir(visible.value))
+onBeforeUnmount(() => pedir(false))
+
 function elegir(v: string) {
   localStorage.setItem('ctd-cookies', v)
   visible.value = false
@@ -18,7 +27,6 @@ function elegir(v: string) {
 </script>
 <style>
 .cookie-bar {
-  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40;
   background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); border-radius: 16px;
   padding: 14px; box-shadow: var(--shadow);
@@ -27,4 +35,5 @@ function elegir(v: string) {
 }
 .cookie-bar p { margin: 0; font-size: 14px; }
 .cookie-bar .row2 { display: flex; gap: 8px; }
+.cookie-bar .row2 > * { flex: 1; }
 </style>

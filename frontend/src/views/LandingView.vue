@@ -182,7 +182,7 @@ const pasos = [
 .land-hero h1 { font-size: clamp(38px, 7vw, 64px); line-height: 1.02; margin: 12px 0; }
 .land-sub { opacity: 0.8; font-size: 18px; max-width: 46ch; }
 .land-ctas { display: flex; gap: 12px; margin: 20px 0 12px; flex-wrap: wrap; }
-.land-cta { background: var(--mint); color: var(--navy); border: 0; border-radius: 16px; padding: 16px 28px; font-weight: 800; font-size: 17px; cursor: pointer; transition: transform 180ms ease; }
+.land-cta { background: var(--mint); color: var(--navy); border: 0; border-radius: 16px; padding: 16px 28px; min-height: 44px; font-weight: 800; font-size: 17px; cursor: pointer; transition: transform 180ms ease; }
 .land-cta:hover { transform: translateY(-2px); }
 .land-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 16px; padding: 16px 28px; font-weight: 700; cursor: pointer; }
 .land-hero .sub { color: #B9C2E0; }
@@ -195,6 +195,7 @@ const pasos = [
 .demo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .demo-btns button {
   display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px;
   border: 1px solid var(--navy); background: var(--surface);
   color: var(--navy); border-radius: 12px; padding: 10px 6px;
   font-size: 13px; font-weight: 800; cursor: pointer;
@@ -218,10 +219,10 @@ div.tick { display: block; }
 /* Módulos editoriales */
 .ed-list { display: grid; margin-top: 8px; }
 .ed-row { display: flex; align-items: baseline; gap: 14px; padding: 18px 2px; border-bottom: 1px solid var(--line); }
-.ed-n { font-weight: 800; color: var(--mint-dark); font-size: 14px; flex: none; }
+.ed-n { font-weight: 800; color: var(--mint-text); font-size: 14px; flex: none; }
 .ed-row strong { font-size: 19px; letter-spacing: 0.02em; }
 .ed-row .sub { margin: 4px 0 0; }
-.ed-arrow { margin-left: auto; font-size: 22px; color: var(--mint-dark); flex: none; }
+.ed-arrow { margin-left: auto; font-size: 22px; color: var(--mint-text); flex: none; }
 /* Bandas de color */
 .bands { display: grid; gap: 10px; margin-top: 16px; }
 .band { border-radius: 18px; padding: 26px 20px; display: flex; align-items: baseline; gap: 12px; }
@@ -241,7 +242,7 @@ div.tick { display: block; }
   border-radius: 14px; padding: 12px;
   animation: chainpulse 4s ease-in-out infinite;
 }
-.chain-node:first-child { border-color: var(--mint-dark); color: var(--mint-dark); }
+.chain-node:first-child { border-color: var(--mint-dark); color: var(--mint-text); }
 .chain-node:last-child { border-color: var(--navy); }
 .chain-node::after { content: '↓'; display: block; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
 .chain-node:last-child::after { content: ''; }

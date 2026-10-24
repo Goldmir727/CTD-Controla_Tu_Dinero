@@ -27,6 +27,16 @@ MESES = {
 }
 
 # Multiplicadores de slang. Se aplican al numero que precede a la palabra.
+# Montos dichos sin cifras, tal como habla la gente: "un millón y medio",
+# "medio millón". El modelo tambien los entendia, pero los reglas necesitan ver
+# el monto en el texto para no marcarlo "dudoso" y obligar a reescribirlo a mano.
+NUMEROS_TEXTO = {"un": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4,
+                 "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10}
+_RE_MILLON_MEDIO = re.compile(
+    r"\b(un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|\d{1,3})"
+    r"\s*mill[oó]n(es)?\s*y\s+medio\b")
+_RE_MEDIO_MILLON = re.compile(r"\bmedio\s+mill[oó]n(es)?\b")
+
 MULTIPLICADORES = {
     "mil": 1000, "miles": 1000, "lucas": 1000, "luca": 1000,
     "millones": 1_000_000, "millon": 1_000_000, "mill": 1_000_000,
@@ -42,9 +52,10 @@ METODOS_TEXTO = {
 }
 
 # Palabras que delatan un ingreso. "pagué" es gasto, "me pagaron" es ingreso.
-PAGAR_INGRESO = ["me pagaron", "me pagaste", "me deposited", "me transfirieron",
-                 "entrada", "ingreso", "gane", "gané", "me llego", "me llegó",
-                 "recibí", "recibi", "me pagaron la quincena", "liquidacion"]
+PAGAR_INGRESO = ["me pagaron", "me pagaste", "me pagan", "me paga", "me deposited",
+                 "me transfirieron", "entrada", "ingreso", "gane", "gané",
+                 "me llego", "me llegó", "recibí", "recibi",
+                 "me pagaron la quincena", "liquidacion"]
 PAGAR_GASTO = ["pague", "pagué", "pago", "gaste", "gasté", "compre", "compré",
                "cancelé", "cancele", "saqué", "saque"]
 
@@ -178,6 +189,14 @@ def montos_en_texto(texto: str) -> list[tuple[float, int, int]]:
     Devuelve lista de (monto, inicio, fin) para poder partir la frase en trozos."""
     t = (texto or "").lower()
     out: list[tuple[float, int, int]] = []
+    # Primero los dichos sin cifras: si "un millon y medio" pasara por el patron
+    # de abajo no matchearia nada (no hay digito delante de "millon").
+    for m in _RE_MILLON_MEDIO.finditer(t):
+        base = NUMEROS_TEXTO.get(m.group(1)) or (float(m.group(1)) if m.group(1).isdigit() else 0)
+        if base > 0:
+            out.append((base * 1_000_000 + 500_000, m.start(), m.end()))
+    for m in _RE_MEDIO_MILLON.finditer(t):
+        out.append((500_000, m.start(), m.end()))
     # "millones" antes que "mil": en la alternacion el orden importa, aunque \b
     # evita que "mil" coma dentro de "millones".
     patron = re.compile(r"(\d[\d.,]*)\s*(miles|millones|millon|mil|lucas?|k)\b")
@@ -187,6 +206,48 @@ def montos_en_texto(texto: str) -> list[tuple[float, int, int]]:
             continue
         out.append((base * MULTIPLICADORES.get(m.group(2), 1000), m.start(), m.end()))
     return out
+
+
+def frecuencia_por_texto(texto: str) -> str | None:
+    """La periodicidad que el texto declara: "cada quincena" -> quincenal.
+
+    None si no hay senal clara. Se exige la palabra completa: que aparezca
+    "quincena" pelado no dice que el pago SEA quincenal, "me pagaron la
+    quincena" es un sueldo puntual de una vez.
+    """
+    t = normalizar(texto)
+    # "me pagan cada domingo" es semanal aunque no diga "cada semana": el dia
+    # de la semana ES la frecuencia. Va antes que el resto porque "cada domingo"
+    # no matchea ninguna de las otras reglas.
+    if dia_semana_por_texto(t) is not None:
+        return "semanal"
+    if re.search(r"\bquincenal(es)?\b|cada\s+quincena|cada\s+quince\b|cada\s+1[45]\s+dias?", t):
+        return "quincenal"
+    if re.search(r"\bsemanal(es)?\b|cada\s+semana|todas?\s+las\s+semanas|cada\s+7\s+dias?", t):
+        return "semanal"
+    if re.search(r"\bmensual(es)?\b|cada\s+mes\b", t):
+        return "mensual"
+    return None
+
+
+def dia_semana_por_texto(texto: str) -> int | None:
+    """El dia de la semana de un fijo: "cada domingo" -> 6 (0 = lunes).
+
+    Se exige que el texto diga que se REPITE ("cada", "todos los", "los
+    domingos"): "el lunes pagué el arriendo" es un movimiento de un dia, no un
+    pago semanal, y marcarlo como fijo semanal inventaria tres pagos mas al mes.
+    """
+    t = normalizar(texto)
+    m = re.search(r"\b(?:cada|todos?\s+los?)\s+"
+                  r"(lunes|martes|miercoles|jueves|viernes|sabados?|domingos?)\b", t)
+    if not m:
+        m = re.search(r"\blos\s+(lunes|martes|miercoles|jueves|viernes|sabados|domingos)\b", t)
+    if not m:
+        return None
+    nombre = m.group(1)
+    if nombre not in DIAS_SEMANA and nombre.endswith("s"):
+        nombre = nombre[:-1]
+    return DIAS_SEMANA.get(nombre)
 
 
 # ---------- fechas relativas ----------

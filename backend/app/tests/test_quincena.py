@@ -9,6 +9,11 @@ import pytest
 
 from app.services import colombia as co
 from app.services import quincena as qn
+from app.services import recurrencia as recu
+
+# Octubre de 2026: el 1 cae jueves y los domingos son 4, 11, 18 y 25.
+OCT_INI, OCT_MED, OCT_FIN = date(2026, 10, 1), date(2026, 10, 15), date(2026, 10, 31)
+Q1, Q2 = (OCT_INI, OCT_MED), (date(2026, 10, 16), OCT_FIN)
 
 
 def test_ocurrencias_de_un_fijo_en_la_quincena():
@@ -17,29 +22,55 @@ def test_ocurrencias_de_un_fijo_en_la_quincena():
     Este es el bug que mas dano hace cuando esta mal: el fijo del dia 20
     desaparece del todo y el usuario se entera el dia que ya no le alcanza.
     """
-    assert qn._ocurrencias_en_quincena(5, "mensual", 1, 15) == 1
-    assert qn._ocurrencias_en_quincena(20, "mensual", 1, 15) == 0
-    assert qn._ocurrencias_en_quincena(20, "mensual", 16, 30) == 1
-    assert qn._ocurrencias_en_quincena(5, "mensual", 16, 30) == 0
-    assert qn._ocurrencias_en_quincena(15, "mensual", 1, 15) == 1
+    assert recu.ocurrencias(*Q1, "mensual", 5) == [date(2026, 10, 5)]
+    assert recu.ocurrencias(*Q1, "mensual", 20) == []
+    assert recu.ocurrencias(*Q2, "mensual", 20) == [date(2026, 10, 20)]
+    assert recu.ocurrencias(*Q2, "mensual", 5) == []
+    assert recu.ocurrencias(*Q1, "mensual", 15) == [date(2026, 10, 15)]
 
 
 def test_un_quincenal_cae_una_vez_por_quincena():
     """Cada 15 dias cae una vez en cada quincena, no 'dos veces en la primera'."""
-    assert qn._ocurrencias_en_quincena(1, "quincenal", 1, 15) == 1
-    assert qn._ocurrencias_en_quincena(1, "quincenal", 16, 30) == 1
-    assert qn._ocurrencias_en_quincena(10, "quincenal", 1, 15) == 1
-    assert qn._ocurrencias_en_quincena(10, "quincenal", 16, 30) == 1
+    assert len(recu.ocurrencias(*Q1, "quincenal", 1)) == 1
+    assert len(recu.ocurrencias(*Q2, "quincenal", 1)) == 1
+    assert len(recu.ocurrencias(*Q1, "quincenal", 10)) == 1
+    assert len(recu.ocurrencias(*Q2, "quincenal", 10)) == 1
+    # El 20 tambien cae dos veces: antes el "35" no existia y la segunda
+    # quincena se perdia entera.
+    assert recu.ocurrencias(*Q2, "quincenal", 20) == [date(2026, 10, 20)]
+    assert len(recu.ocurrencias(OCT_INI, OCT_FIN, "quincenal", 20)) == 2
 
 
 def test_un_semanal_caftera_las_dos_quincenas():
     """Desde el dia 1, cada 7 dias: 1, 8, 15 en la primera y 22, 29 en la segunda."""
-    assert qn._ocurrencias_en_quincena(1, "semanal", 1, 15) == 3
-    assert qn._ocurrencias_en_quincena(1, "semanal", 16, 30) == 2
+    assert len(recu.ocurrencias(*Q1, "semanal", 1)) == 3
+    assert len(recu.ocurrencias(*Q2, "semanal", 1)) == 2
+    # Y en el mes entero son 4 o 5, no dos: un semanal anclado al 18 perdia las
+    # semanas del 4 y el 11.
+    assert len(recu.ocurrencias(OCT_INI, OCT_FIN, "semanal", 18)) >= 4
 
 
 def test_frecuencia_desconocida_no_inventa_plata():
-    assert qn._ocurrencias_en_quincena(5, "trimestral", 1, 15) == 0
+    assert recu.ocurrencias(*Q1, "trimestral", 5) == []
+
+
+def test_la_paga_de_cada_domingo_cae_en_domingos():
+    """El caso que rompia: "me pagan 63 mil cada domingo".
+
+    Con el dia del mes como ancla, el fijo caia el 18 y el 25 de octubre y el 18
+    de noviembre (un miercoles). Un domingo no es un dia del mes.
+    """
+    octubre = recu.ocurrencias(OCT_INI, OCT_FIN, "semanal", 18, 6)
+    assert octubre == [date(2026, 10, d) for d in (4, 11, 18, 25)]
+    noviembre = recu.ocurrencias(date(2026, 11, 1), date(2026, 11, 30), "semanal", 18, 6)
+    assert all(d.weekday() == 6 for d in noviembre)
+    assert noviembre[0] == date(2026, 11, 1), "el mes siguiente tiene que seguir en domingo"
+
+
+def test_la_etiqueta_dice_el_dia_de_la_semana():
+    assert recu.etiqueta("semanal", 18, 6) == "cada domingo"
+    assert recu.etiqueta("quincenal", 20) == "el 20 y el 5 de cada mes"
+    assert recu.etiqueta("mensual", 5) == "el día 5 de cada mes"
 
 
 def test_febrero_no_revienta_al_pedir_el_dia_30():
@@ -63,8 +94,10 @@ def test_dias_del_mes_respeta_febrero_y_bisiesto():
 
 def test_un_fijo_del_dia_30_cae_en_la_segunda_quincena_de_febrero():
     """Con el bug anterior, el dia 30 en febrero no existia y el fijo se perdia."""
-    assert qn._ocurrencias_en_quincena(30, "mensual", 16, 28) == 0
-    assert qn._ocurrencias_en_quincena(28, "mensual", 16, 28) == 1
+    assert recu.ocurrencias(date(2026, 2, 16), date(2026, 2, 28), "mensual", 30) \
+        == [date(2026, 2, 28)]
+    assert recu.ocurrencias(date(2026, 2, 16), date(2026, 2, 28), "mensual", 28) \
+        == [date(2026, 2, 28)]
 
 
 def test_la_segunda_quincena_se_compara_con_la_segunda_del_mes_anterior():

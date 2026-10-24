@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models.finance import Account, Budget, Category, Transaction
 from app.models.goals import Goal, GoalAporte, Recurring
+from app.services import recurrencia as recu
 from app.services.calculos import (
     balance_mes,
     meta_faltante,
@@ -117,8 +118,10 @@ def fijos_mensuales(db: Session, user_id: str, perfil_id: str, solo_activos: boo
         else:
             gas += m
         detalle.append({"id": r.id, "nombre": r.nombre, "tipo": r.tipo, "monto_mes": m,
-                        "frecuencia": r.frecuencia, "dia": r.dia, "activo": r.activo,
-                        "confirmado": r.confirmado, "nota": r.nota})
+                        "frecuencia": r.frecuencia, "dia": r.dia,
+                        "dia_semana": r.dia_semana,
+                        "etiqueta": recu.etiqueta(r.frecuencia, r.dia, r.dia_semana),
+                        "activo": r.activo, "confirmado": r.confirmado, "nota": r.nota})
     ing, gas = round(ing, 2), round(gas, 2)
     return {"ingresos_fijos_mes": ing, "gastos_fijos_mes": gas,
             "neto_fijo_mes": round(ing - gas, 2),

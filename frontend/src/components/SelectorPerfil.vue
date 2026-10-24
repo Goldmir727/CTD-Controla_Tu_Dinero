@@ -78,6 +78,8 @@ defineExpose({ cargar })
 <template>
   <div v-if="perfiles.length" class="perfil-wrap">
     <button class="perfil-btn" :class="activo?.tipo" @click="abierto = !abierto"
+            :aria-expanded="abierto" :aria-haspopup="perfiles.length > 1 ? 'menu' : undefined"
+            :aria-label="perfiles.length > 1 ? 'Cambiar entre Personal y Negocio' : 'Tu perfil'"
             :title="perfiles.length > 1 ? 'Cambiar entre Personal y Negocio' : 'Tu perfil'">
       <i class="bi" :class="activo?.tipo === 'negocio' ? 'bi-shop' : 'bi-person'"></i>
       <span>{{ activo?.nombre ?? 'Perfil' }}</span>
@@ -121,10 +123,11 @@ defineExpose({ cargar })
   display: flex; align-items: center; gap: 5px;
   border: 1px solid var(--line); background: var(--surface);
   border-radius: 999px; padding: 6px 11px; font: 600 12px var(--font);
-  color: var(--navy); cursor: pointer; max-width: 132px;
+  color: var(--ink); cursor: pointer; max-width: 132px; min-height: 44px;
 }
 .perfil-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.perfil-btn.negocio { border-color: var(--mint); color: var(--mint-dark); background: var(--mint-soft); }
+.perfil-btn.negocio { border-color: var(--mint-dark); color: var(--mint-text); background: var(--mint-tint); }
+.perfil-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, 0.25); }
 .flecha { font-size: 10px; opacity: .6; }
 
 .perfil-fondo { position: fixed; inset: 0; z-index: 45; }
@@ -136,7 +139,7 @@ defineExpose({ cargar })
 }
 .titulo { margin: 2px 0 8px; font-weight: 600; }
 .perfil-item {
-  display: flex; align-items: center; gap: 8px; width: 100%;
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
   padding: 9px 8px; border: 0; border-radius: 10px;
   background: none; color: var(--ink); font: 500 14px var(--font);
   text-align: left; cursor: pointer;
@@ -144,7 +147,7 @@ defineExpose({ cargar })
 .perfil-item:hover { background: var(--bg); }
 .perfil-item span { flex: 1; }
 .perfil-item small { color: var(--ink-soft); font-size: 11px; }
-.perfil-item .ok { color: var(--mint-dark); }
+.perfil-item .ok { color: var(--mint-text); }
 .perfil-item.on { background: var(--mint-soft); }
 
 .fila { display: flex; gap: 6px; }

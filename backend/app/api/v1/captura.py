@@ -64,6 +64,14 @@ class MovimientoAConfirmar(BaseModel):
     # responde "es distinto": no es el Arriendo de siempre sino, digamos, un
     # arriendo en otro apartamento o el celular que renueva cada mes.
     nuevo_fijo: bool = False
+    # Periodicidad que la captura leyo del texto ("cada quincena"). La leyo la
+    # propuesta y se respeta al crear el fijo; None = mensual, como siempre.
+    frecuencia: Literal["mensual", "quincenal", "semanal"] | None = None
+    dia_fijo: int | None = Field(default=None, ge=1, le=31)
+    # Dia de la semana del fijo semanal: 0=lunes .. 6=domingo. Sin esto, "me
+    # pagan cada domingo" se guardaba anclado a un dia del mes que el mes
+    # siguiente ya no era domingo.
+    dia_semana: int | None = Field(default=None, ge=0, le=6)
 
 
 class CapturaConfirmarIn(BaseModel):

@@ -142,7 +142,7 @@ async function cancelar() {
 .precio strong { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
 .lista { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 12px; }
 .lista li { display: flex; gap: 10px; align-items: flex-start; }
-.lista i { color: var(--mint-dark); font-size: 16px; margin-top: 2px; }
+.lista i { color: var(--mint-text); font-size: 16px; margin-top: 2px; }
 .lista div { display: grid; gap: 2px; }
-.link { background: none; border: 0; color: var(--mint-dark); font-weight: 700; padding: 8px 0 0; cursor: pointer; }
+.link { background: none; border: 0; color: var(--mint-text); font-weight: 700; padding: 8px 0 0; cursor: pointer; }
 </style>

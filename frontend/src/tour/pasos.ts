@@ -64,19 +64,18 @@ export function pasosPara(pais: ContextoPais): Paso[] {
         'números. Te lo mostramos en cuarenta segundos. Puedes saltarlo cuando quieras.',
     },
     /*
- * El selector apuntaba a `[data-tour="capturar"]`, que estaba en el boton
- * "+ Nuevo movimiento" y en el flotante: los dos abren el formulario MANUAL.
- * El paso decia "dictalo" sobre un boton donde no se dicta nada, que es la
- * ambiguedad que reporto el usuario. Ahora apunta a la pastilla de Captura,
- * que si acepta frase y microfono.
+ * `[data-tour="captura"]` esta en el boton flotante (movil) y en la pastilla
+ * Capturar (escritorio, donde no hay flotante): los dos llevan a la captura por
+ * voz. El texto no nombra el control a proposito, porque cambia segun el ancho
+ * de pantalla y nombrar uno solo seria mentira en el otro.
  */
 {
       selector: '[data-tour="captura"]',
       titulo: 'Registra lo que gastaste, hablándolo',
       texto:
-        'Toca Capturar y escribe "gasté 25 mil en un almuerzo", o dictalo con el ' +
-        'microfono. La app te muestra lo que entendió y tú confirmas antes de que ' +
-        'se guarde nada. También sirve para ingresos y para pagos que se repiten.',
+        'Escribe "gasté 25 mil en un almuerzo", o dictalo con el micrófono. La app ' +
+        'te muestra lo que entendió y tú confirmas antes de que se guarde nada. ' +
+        'También sirve para ingresos y para pagos que se repiten.',
       ruta: '/movimientos',
     },
     {
@@ -98,9 +97,9 @@ export function pasosPara(pais: ContextoPais): Paso[] {
       selector: '[data-tour="nav"]',
       titulo: 'Cinco pantallas, cinco oficios',
       texto:
-        'Inicio para lo esencial, Movs para corregir lo que registraste, Plan para ' +
-        'presupuestos, metas y gastos fijos, Datos para ver tendencias, y Asesor ' +
-        'para preguntar.',
+        'Inicio para lo esencial, Movs para corregir lo que registraste y fijar lo ' +
+        'que se repite (pestaña Fijos), Plan para presupuestos y metas, Datos para ' +
+        'ver tendencias, y Asesor para preguntar.',
       lado: 'abajo',
       ruta: '*',
     },

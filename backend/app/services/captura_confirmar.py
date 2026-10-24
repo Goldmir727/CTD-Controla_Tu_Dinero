@@ -9,7 +9,7 @@ correccion en una se olvidara en la otra.
 No lanza HTTPException: aqui se reportan los problemas por movimiento y se sigue.
 Quien llama decide si eso es un error o un aviso.
 """
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,10 @@ from app.models.finance import Account, Category, PaymentMethod, Transaction
 from app.services import captura as cap
 
 __all__ = ["proponer", "confirmar_captura", "validar_fecha", "resolver_cuenta"]
+
+# El plano de un fijo solo admite tres frecuencias; cualquier otra cosa (o nada)
+# cae a mensual para no partirdose en el motor de fijos (FACTOR_FRECUENCIA).
+FRECUENCIAS = {"mensual", "quincenal", "semanal"}
 
 
 def validar_fecha(iso: str) -> date:
@@ -133,15 +137,35 @@ def confirmar_captura(db: Session, user, perfil, captura_id: str,
                 errores.append({"indice": i,
                                 "detalle": "Ese fijo no es de este perfil; se guardó sin enlace"})
 
+            # "me pagan un millon y medio cada quincena": la frecuencia la leyo
+            # la captura y hay que respetarla. Antes cada fijo nacia mensual por
+            # decreto y el motor lo contaba una vez al mes en vez de dos.
+            frecuencia = m.get("frecuencia") if m.get("frecuencia") in FRECUENCIAS \
+                else "mensual"
+            # El dia de la semana solo manda en un fijo semanal. En los demas se
+            # descarta: guardarlo ahi es un dato que nadie lee y que reaparece al
+            # cambiar la frecuencia, como si el usuario lo hubiera elegido.
+            dia_semana = m.get("dia_semana")
+            if (frecuencia != "semanal" or not isinstance(dia_semana, int)
+                    or not 0 <= dia_semana <= 6):
+                dia_semana = None
+            dia_fijo = m.get("dia_fijo")
+            if not isinstance(dia_fijo, int) or not 1 <= dia_fijo <= 31:
+                # Un semanal se ancla al ultimo dia de esa semana que ya paso:
+                # asi el fijo nace en una fecha real y no en "hoy".
+                dia_fijo = (fecha - timedelta(days=(fecha.weekday() - dia_semana) % 7)).day \
+                    if dia_semana is not None else fecha.day
+
             if m.get("nuevo_fijo"):
                 nombre_fijo = (m.get("descripcion") or cat.nombre)[:120]
                 ya = db.query(Recurring).filter_by(perfil_id=perfil.id, nombre=nombre_fijo,
-                                                    dia=fecha.day, tipo=m.get("tipo"),
+                                                    tipo=m.get("tipo"),
                                                     activo=True).first()
                 if not ya:
                     db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
                                      nombre=nombre_fijo, tipo=m.get("tipo"), monto=m["monto"],
-                                     dia=fecha.day, frecuencia="mensual",
+                                     dia=dia_fijo, frecuencia=frecuencia,
+                                     dia_semana=dia_semana,
                                      cuenta_id=cuenta.id, categoria_id=cat.id, activo=True,
                                      confirmado=True, nota="Creado desde la captura"))
             elif m.get("fijo") and not rec and not db.query(
@@ -150,8 +174,9 @@ def confirmar_captura(db: Session, user, perfil, captura_id: str,
                                         activo=True).first():
                 db.add(Recurring(user_id=user.id, perfil_id=perfil.id,
                                  nombre=m.get("descripcion") or cat.nombre,
-                                 tipo=m.get("tipo"), monto=m["monto"], dia=fecha.day,
-                                 frecuencia="mensual", cuenta_id=cuenta.id,
+                                 tipo=m.get("tipo"), monto=m["monto"], dia=dia_fijo,
+                                 frecuencia=frecuencia, dia_semana=dia_semana,
+                                 cuenta_id=cuenta.id,
                                  categoria_id=cat.id, activo=True))
         except Exception as e:  # noqa: BLE001 - se reporta por movimiento, no se cae todo
             errores.append({"indice": i, "detalle": str(e)})

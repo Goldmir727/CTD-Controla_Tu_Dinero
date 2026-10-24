@@ -15,14 +15,42 @@
   --surface: #FFFFFF;
   --line: #E2E8F0;
   --ink: #10202F;
-  --ink-soft: #6B7A87;
+  /* Texto secundario con 5.85:1 sobre --bg: antes (#6B7A87) daba 4.18:1 y
+     no cumplía AA para texto normal. */
+  --ink-soft: #55636F;
   --danger: #E25555;
   --danger-soft: rgba(226, 85, 85, 0.12);
   --mint-tint: rgba(0, 255, 171, 0.14);
   --warning: #D89A27;
+  /* Variantes SOLO para texto. Los colores vivos de arriba son rellenos,
+     bordes e iconos sobre navy (--mint ahí da 14.22:1), pero como texto
+     pequeño sobre blanco no llegan a AA. */
+  --mint-text: #0B7A5C;
+  --warning-text: #8A6A18;
+  --danger-text: #C0392B;
   --radius: 20px;
   --shadow: 0 12px 32px rgba(5, 11, 59, 0.12);
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Capas flotantes: un solo orden para que nada tape la navegación.
+     nav < acción principal < banners < hojas < modales < recorrido. */
+  --z-nav: 20;
+  --z-action: 30;
+  --z-banner: 40;
+  --z-sheet: 50;
+  --z-modal: 60;
+  /* Avisos transitorios: por encima de hojas y modales (hay que ver "listo"
+     justo cuando se cierra el diálogo), por debajo del recorrido. */
+  --z-toast: 70;
+  --z-tour: 90;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --nav-h: 60px;
+  --fab-bottom: 92px;
+  --fab-size: 64px;
+  /* Los banners viven por ENCIMA del FAB, no encima de la barra: si no,
+     tapaban el botón que el usuario necesitaba tocar. */
+  --banner-bottom: calc(var(--fab-bottom) + var(--fab-size) + 12px);
 }
 
 [data-theme='dark'] {
@@ -33,6 +61,9 @@
   --ink: #FFFFFF;
   --ink-soft: #B9C2E0;
   --line: #1B2560;
+  --mint-text: #5CF2C0;
+  --warning-text: #F3C969;
+  --danger-text: #FF8A8A;
 }
 /* Chips en oscuro: borde visible y activo en mint */
 [data-theme='dark'] .chip { border-color: var(--ink-soft); background: transparent; color: var(--ink); }
@@ -44,11 +75,14 @@
    un boton pelado. tokens.css entra siempre. */
 .chip {
   border: 1px solid var(--navy); background: var(--surface); color: var(--navy);
-  border-radius: 99px; padding: 8px 14px; font-weight: 700;
+  border-radius: 99px; padding: 10px 16px; font-weight: 700;
+  min-height: 44px;
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
 .chip.on { background: var(--navy); color: #fff; }
+.chip:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, 0.3); }
+.chip:disabled { opacity: .6; cursor: wait; }
 
 * { box-sizing: border-box; }
 :root { color-scheme: light; }
@@ -64,7 +98,13 @@ body {
 }
 
 /* Nivel 1: información base */
-.page { max-width: 480px; margin: 0 auto; padding: 20px 16px 110px; background: var(--bg); }
+.page {
+  max-width: 480px; margin: 0 auto;
+  /* 176px deja libre el FAB (92 + 64); con 110px la última fila de una lista
+     quedaba detrás del botón flotante. */
+  padding: calc(20px + var(--safe-top)) 16px calc(176px + var(--safe-bottom));
+  background: var(--bg);
+}
 .eyebrow { font-size: 12px; letter-spacing: 0.12em; color: var(--ink-soft); font-weight: 700; }
 .big-number { font-size: 44px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
 .divider { height: 1px; background: var(--line); margin: 16px 0; border: 0; }
@@ -81,6 +121,17 @@ body {
 }
 .card-featured:hover { transform: translateY(-2px); border-color: var(--mint); }
 .card-featured .delta { color: var(--mint); font-weight: 700; }
+/* --ink-soft (#55636F) esta pensado para fondos blancos: sobre el navy de la
+   tarjeta queda casi invisible ("Ingresaste", "Gastaste", "Tasa de ahorro").
+   Aqui se usa el mismo gris claro que el resto del texto secundario del navy. */
+.card-featured .sub,
+.card-featured .eyebrow { color: #B9C2E0; }
+/* Sobre la tarjeta navy se usan los colores VIVOS: las variantes de texto
+   (--mint-text, --danger-text) están pensadas para fondos claros y aquí
+   quedarían casi invisibles. */
+.card-featured .t-pos { color: var(--mint); }
+.card-featured .t-neg { color: #FF9B9B; }
+.card-featured .t-warn { color: #F3C969; }
 
 .card {
   background: var(--surface);
@@ -101,7 +152,8 @@ body {
 
 /* Nivel 3: FAB */
 .fab {
-  position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: calc(var(--fab-bottom) + var(--safe-bottom));
+  transform: translateX(-50%); z-index: var(--z-action);
   width: 64px; height: 64px; border-radius: 50%;
   background: var(--mint); color: var(--navy);
   font-size: 34px; font-weight: 800; border: 0;
@@ -126,26 +178,43 @@ body {
   /* 1fr / hueco del FAB / 1fr. El hueco queda EXACTO en el centro de la barra,
      que es donde cae el .fab (left:50%). Con flex y dos mitades el hueco se
      descentraba segun cuantos enlaces hubiera de cada lado. */
-  display: grid; grid-template-columns: 1fr 52px 1fr; align-items: center;
-  padding: 12px 8px calc(12px + env(safe-area-inset-bottom));
-  z-index: 20;
+  display: grid; grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr); align-items: center;
+  min-height: calc(var(--nav-h) + var(--safe-bottom));
+  padding: 8px 8px calc(8px + var(--safe-bottom));
+  z-index: var(--z-nav);
 }
 /* Cada mitad reparte sus enlaces en columnas iguales: dentro de cada lado el
    espaciado es parejo, y los dos lados son simetricos alrededor del FAB. */
 .bottom-nav .nav-side { display: grid; align-items: center; min-width: 0; }
-.bottom-nav .nav-side:first-of-type { grid-template-columns: repeat(2, 1fr); }
-.bottom-nav .nav-side:last-of-type { grid-template-columns: repeat(3, 1fr); }
-.bottom-nav a { color: #B9C2E0; text-decoration: none; font-size: 11px; text-align: center; opacity: 0.8; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Tres y tres: con la Agenda son seis destinos y el FAB queda exacto en el
+   centro. Si un lado tuviera dos, el hueco del FAB se descentra. */
+.bottom-nav .nav-side:first-of-type { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bottom-nav .nav-side:last-of-type { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bottom-nav a {
+  color: #B9C2E0; text-decoration: none; font-size: 12px; line-height: 1.1;
+  text-align: center; opacity: 0.9; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; min-height: 44px; padding: 4px 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bottom-nav a i { font-size: 17px; line-height: 1; flex: none; }
+.bottom-nav a span { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Seis destinos en un telefono de 360px dejan ~49px por enlace: a 12px la
+   palabra "Agenda" se corta. Un punto menos entra completa. */
+@media (max-width: 400px) { .bottom-nav a { font-size: 10.5px; } }
 .bottom-nav a.router-link-active { color: var(--mint); opacity: 1; }
+.bottom-nav a:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--mint); border-radius: 10px; }
 .bottom-nav .fab-gap { pointer-events: none; }
 
 /* Nivel 4: alertas */
-.alert { color: var(--danger); font-weight: 700; }
+.alert { color: var(--danger-text); font-weight: 700; }
 
 /* Botón primario: acción principal (mint, texto navy). */
 .btn-primary, .btn-mint {
   background: var(--mint); color: var(--navy);
   border: 0; border-radius: 12px; padding: 12px 18px;
+  min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   font-weight: 800; cursor: pointer;
   transition: background 180ms ease, transform 180ms ease;
 }
@@ -161,10 +230,18 @@ body {
   opacity: .6; cursor: wait;
 }
 
+/* Botón compacto de vista (Plan, Movs). El color y el padding los pone cada
+   vista; aquí solo se garantiza que sea tocable. */
+.btn-new {
+  min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+}
+
 /* Botón fantasma: acción secundaria (borde de línea, sin relleno). */
 .btn-ghost {
   background: none; border: 1px solid var(--line); border-radius: 12px;
-  padding: 12px 18px; color: var(--ink); cursor: pointer;
+  padding: 12px 18px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--ink); cursor: pointer;
   font-weight: 800; white-space: nowrap;
   transition: border-color 180ms ease, color 180ms ease;
 }
@@ -181,7 +258,9 @@ body {
 /* Botón de acción destructiva (salir de cuenta, eliminar). */
 .btn-danger {
   background: none; border: 1px solid var(--danger); border-radius: 12px;
-  padding: 12px 18px; color: var(--danger); cursor: pointer;
+  padding: 12px 18px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--danger-text); cursor: pointer;
   font-weight: 800; white-space: nowrap;
   transition: background 180ms ease, color 180ms ease;
 }
@@ -204,7 +283,7 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .input, select {
-  width: 100%; padding: 12px 14px; border-radius: 14px;
+  width: 100%; padding: 12px 14px; border-radius: 14px; min-height: 44px;
   border: 1px solid var(--line); background: var(--surface);
   color: var(--ink); font-size: 16px;
   transition: border-color 180ms ease, box-shadow 180ms ease;
@@ -228,9 +307,9 @@ select { appearance: none; padding-right: 36px; }
 .rise { animation: rise 220ms ease-out; }
 
 /* ============ NIVEL 2 — información financiera (color con significado) ============ */
-.t-pos { color: var(--mint-dark); }
-.t-neg { color: var(--danger); }
-.t-warn { color: var(--warning); }
+.t-pos { color: var(--mint-text); }
+.t-neg { color: var(--danger-text); }
+.t-warn { color: var(--warning-text); }
 .amount { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sub { font-size: 13px; color: var(--ink-soft); }
 
@@ -240,8 +319,8 @@ select { appearance: none; padding-right: 36px; }
   display: flex; align-items: center; justify-content: center;
   font-weight: 800; font-size: 17px;
 }
-.icon-badge.is-in { background: var(--mint-tint); color: var(--mint-dark); }
-.icon-badge.is-out { background: var(--danger-soft); color: var(--danger); }
+.icon-badge.is-in { background: var(--mint-tint); color: var(--mint-text); }
+.icon-badge.is-out { background: var(--danger-soft); color: var(--danger-text); }
 
 /* Barras por estado: solo cambia la señal, no toda la tarjeta */
 .progress.warn > span { background: var(--warning); }
@@ -263,7 +342,7 @@ select { appearance: none; padding-right: 36px; }
   animation: glowin 600ms ease-out;
 }
 @keyframes glowin { from { box-shadow: 0 0 0 0 rgba(0, 255, 171, 0); transform: scale(0.985); } to { transform: none; } }
-.done-flag { color: var(--mint-dark); font-weight: 800; letter-spacing: 0.06em; font-size: 12px; }
+.done-flag { color: var(--mint-text); font-weight: 800; letter-spacing: 0.06em; font-size: 12px; }
 
 /* Editorial: números con presencia */
 .display { font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
@@ -275,22 +354,50 @@ select { appearance: none; padding-right: 36px; }
 /* ============ Auth editorial ============ */
 .auth-wrap { min-height: 100dvh; background: var(--auth-bg); }
 .auth-wrap .page { background: transparent; }
-.field label { display: block; font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 0 0 6px 2px; }
+.field { display: grid; gap: 6px; }
+.field label { display: block; font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: 0; }
 .pass-wrap { position: relative; }
 .pass-wrap .input { padding-right: 48px; }
-.pass-eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: 0; font-size: 18px; cursor: pointer; padding: 8px; }
+.pass-eye {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 0; font-size: 18px; cursor: pointer;
+}
 
-/* Banner install PWA (masificación) */.install-bar {
-  /* Antes bottom:84px, que chocaba con el FAB (bottom:92px, 64px alto ->
-     ocupa 92-156px). El FAB solo existe <900px; el banner sube por encima. */
-  position: fixed; left: 12px; right: 12px; bottom: 168px; z-index: 25;
+/* Banner install PWA (masificación). La posición la da .floating-banner. */
+.install-bar {
   background: var(--navy); color: #fff; border-radius: 16px;
   padding: 12px 14px; display: flex; gap: 10px; align-items: center;
   box-shadow: var(--shadow);
   animation: rise 240ms ease-out;
 }
-.install-bar small { opacity: 0.75; display: block; }
-@media (min-width: 900px) { .install-bar { bottom: 92px; } }
+.install-bar small { opacity: 0.85; display: block; }
+
+/* ============ Sistema de capas flotantes ============ */
+/* Un único punto para banners transitorios. Solo se muestra uno a la vez
+   (useBannerSlot), y siempre por encima del FAB, nunca encima de la barra. */
+.floating-banner {
+  position: fixed; left: 12px; right: 12px; margin: 0 auto;
+  bottom: calc(var(--banner-bottom) + var(--safe-bottom));
+  z-index: var(--z-banner);
+  max-width: 480px;
+}
+@media (min-width: 900px) {
+  .floating-banner { bottom: calc(24px + var(--safe-bottom)); max-width: 560px; }
+}
+
+/* Utilidad para etiquetas que solo debe leer el lector de pantalla. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Acciones de texto: 44px de alto real, no solo el alto de la letra. */
+.link {
+  display: inline-flex; align-items: center; min-height: 44px;
+  background: none; border: 0; color: var(--ink-soft); cursor: pointer;
+}
+.link:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, 0.2); border-radius: 8px; }
 
 /* Empty state editorial */
 .empty { text-align: center; padding: 28px 12px; color: var(--ink-soft); }
@@ -308,14 +415,22 @@ select { appearance: none; padding-right: 36px; }
 /* Toggle luna/sol en auth */
 .theme-toggle {
   background: var(--surface); border: 1px solid var(--line); border-radius: 50%;
-  width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
   font-size: 18px; cursor: pointer; color: var(--ink);
 }
+.theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 255, 171, 0.25); }
 
 @media (min-width: 900px) {
   .page { max-width: 720px; }
   /* La barra sigue al contenido: mismo breakpoint, mismo ancho. */
   .bottom-nav { max-width: 720px; }
+}
+
+/* Respeta a quien pidió menos movimiento: las animaciones infinitas no son
+   decoración neutra, pueden causar molestias. */
+@media (prefers-reduced-motion: reduce) {
+  .glow-line, .skel, .grab .punto, .tick { animation: none !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
 }
 
 /* ---------- Escritorio ----------
@@ -348,9 +463,11 @@ select { appearance: none; padding-right: 36px; }
   .bottom-nav .nav-side { display: contents; }
   .bottom-nav .fab-gap { display: none; }
   .bottom-nav a {
+    flex-direction: row; justify-content: flex-start; gap: 10px;
     text-align: left; font-size: 13.5px; padding: 10px 14px;
-    border-radius: 10px;
+    min-height: 44px; border-radius: 10px;
   }
+  .bottom-nav a i { font-size: 16px; }
   .bottom-nav a:hover { background: rgba(255, 255, 255, .06); }
   .bottom-nav a.router-link-active { background: rgba(0, 255, 171, .12); }
 
@@ -360,11 +477,18 @@ select { appearance: none; padding-right: 36px; }
   }
 }
 
+/* En una columna las tarjetas navy quedaban pegadas la una a la otra: se tocaba
+   "Disponible" y se abria la de abajo, y no habia forma de saber donde termina
+   una y empieza la siguiente. Un respiro entre bloques resuelve las dos cosas. */
+@media (max-width: 999px) {
+  .page.dashboard > * + * { margin-top: 16px; }
+}
+
 /* El escritorio aprovecho mejor el ancho si las tarjetas se reparten en dos
    columnas en vez de apilarse. Solo en Inicio: en Movs y Plan la lista es
    lineal y partirla obligaria a scroll horizontal. */
 @media (min-width: 1000px) {
-  .page.dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; align-items: start; }
+  .page.dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
   .page.dashboard > section:first-of-type,
   .page.dashboard > .aviso-mezcla,
   .page.dashboard > .card-featured,

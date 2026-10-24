@@ -1,33 +1,71 @@
 <template>
   <main class="page">
     <h2>Nuevo movimiento</h2>
-    <form @submit.prevent="guardar" style="display: grid; gap: 12px">
-      <div class="tipo-switch" role="group" aria-label="Tipo de movimiento">
-        <button type="button" :class="['chip', form.tipo === 'gasto' ? 'on' : '']" @click="form.tipo = 'gasto'">Gasto</button>
-        <button type="button" :class="['chip', form.tipo === 'ingreso' ? 'on' : '']" @click="form.tipo = 'ingreso'">Ingreso</button>
+    <p v-if="error" id="nm-error" ref="errorBox" class="alert" role="alert" aria-live="assertive">
+      {{ error }}
+    </p>
+    <form @submit.prevent="guardar" style="display: grid; gap: 14px">
+      <div class="field">
+        <span class="etiqueta">Tipo de movimiento</span>
+        <div class="tipo-switch" role="group" aria-label="Tipo de movimiento">
+          <button type="button" :class="['chip', form.tipo === 'gasto' ? 'on' : '']"
+                  :aria-pressed="form.tipo === 'gasto'" @click="form.tipo = 'gasto'">Gasto</button>
+          <button type="button" :class="['chip', form.tipo === 'ingreso' ? 'on' : '']"
+                  :aria-pressed="form.tipo === 'ingreso'" @click="form.tipo = 'ingreso'">Ingreso</button>
+        </div>
       </div>
-      <NumeroInput v-model="form.monto" placeholder="Monto (ej: 100.000)" required />
-      <input v-model="form.descripcion" placeholder="Descripción" class="input" />
-      <select v-model="form.cuenta_id" class="input" required>
-        <option value="" disabled>Cuenta</option>
-        <option v-for="c in cuentas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-      </select>
-      <select v-model="form.categoria_id" class="input" required>
-        <option value="" disabled>Categoría</option>
-        <option v-for="c in categoriasFiltradas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-      </select>
-      <select v-model="form.metodo_id" class="input">
-        <option value="" disabled>Método (opcional)</option>
-        <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
-      </select>
-      <input v-model="form.fecha" type="date" class="input" required />
-      <button class="btn-primary" :disabled="loading || !valido">{{ loading ? 'Guardando…' : 'Guardar' }}</button>
-      <p v-if="error" class="alert">{{ error }}</p>
+
+      <div class="field">
+        <label for="nm-monto">Monto</label>
+        <NumeroInput id="nm-monto" v-model="form.monto" placeholder="Ej. 100.000"
+                     :aria-describedby="error ? 'nm-error' : undefined" required />
+      </div>
+
+      <div class="field">
+        <label for="nm-desc">Descripción</label>
+        <input id="nm-desc" v-model="form.descripcion" placeholder="Ej. Almuerzo con amigos" class="input" />
+      </div>
+
+      <div class="field">
+        <label for="nm-cuenta">Cuenta</label>
+        <select id="nm-cuenta" v-model="form.cuenta_id" class="input" required
+                :aria-describedby="error ? 'nm-error' : undefined">
+          <option value="" disabled>Elige una cuenta</option>
+          <option v-for="c in cuentas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="nm-categoria">Categoría</label>
+        <select id="nm-categoria" v-model="form.categoria_id" class="input" required
+                :aria-describedby="error ? 'nm-error' : undefined">
+          <option value="" disabled>Elige una categoría</option>
+          <option v-for="c in categoriasFiltradas" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="nm-metodo">Método de pago <span class="sub">(opcional)</span></label>
+        <select id="nm-metodo" v-model="form.metodo_id" class="input">
+          <option value="">Sin método</option>
+          <option v-for="m in metodos" :key="m.id" :value="m.id">{{ m.nombre }}</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="nm-fecha">Fecha</label>
+        <input id="nm-fecha" v-model="form.fecha" type="date" class="input" required
+               :aria-describedby="error ? 'nm-error' : undefined" />
+      </div>
+
+      <button class="btn-primary" :disabled="loading || !valido">
+        {{ loading ? 'Guardando…' : 'Guardar' }}
+      </button>
     </form>
   </main>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
@@ -35,6 +73,7 @@ const router = useRouter()
 const route = useRoute()
 const loading = ref(false)
 const error = ref('')
+const errorBox = ref<HTMLElement | null>(null)
 const cuentas = ref<{ id: string; nombre: string }[]>([])
 const categorias = ref<{ id: string; nombre: string; tipo: string }[]>([])
 const metodos = ref<{ id: string; nombre: string }[]>([])
@@ -47,6 +86,11 @@ const form = reactive({ tipo: 'gasto', monto: null as number | null, descripcion
  */
 onMounted(() => {
   if (route.query.tipo === 'ingreso' || route.query.tipo === 'gasto') form.tipo = route.query.tipo
+  // Desde el calendario se entra con la fecha ya elegida. Solo se acepta una
+  // fecha valida y no futura: el backend rechaza el futuro y no tiene sentido
+  // ofrecer un formulario que va a fallar al guardar.
+  const f = String(route.query.fecha ?? '')
+  if (/^\d{4}-\d{2}-\d{2}$/.test(f) && f <= new Date().toISOString().slice(0, 10)) form.fecha = f
 })
 
 /**
@@ -75,8 +119,13 @@ onMounted(async () => {
     categorias.value = ca.data
     metodos.value = me.data
     if (cuentas.value[0]) form.cuenta_id = cuentas.value[0].id
-  } catch { error.value = 'No se pudieron cargar cuentas/categorías. Reintenta.' }
+  } catch { mostrarError('No se pudieron cargar cuentas/categorías. Reintenta.') }
 })
+
+function mostrarError(msg: string) {
+  error.value = msg
+  void nextTick(() => errorBox.value?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+}
 
 function detalle422(e: unknown): string {
   const r = (e as { response?: { data?: { detail?: unknown; field_errors?: Record<string, string> } } }).response?.data
@@ -93,7 +142,7 @@ async function guardar() {
     const payload = { ...form, categoria_id: form.categoria_id || null, metodo_id: form.metodo_id || null }
     await api.post('/movimientos', payload, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
     router.push('/inicio')
-  } catch (e: unknown) { error.value = detalle422(e) }
+  } catch (e: unknown) { mostrarError(detalle422(e)) }
   finally { loading.value = false }
 }
 </script>
@@ -102,4 +151,5 @@ async function guardar() {
    dos opciones que ademas salia con el valor equivocado. */
 .tipo-switch { display: flex; gap: 8px; }
 .tipo-switch .chip { flex: 1; }
+.etiqueta { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
 </style>

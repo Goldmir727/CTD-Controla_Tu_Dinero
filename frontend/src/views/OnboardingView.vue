@@ -7,12 +7,12 @@
       <button :class="['chip', modo === 'todo_junto' ? 'on' : '']" @click="modo = 'todo_junto'">Todo en una cuenta</button>
       <button :class="['chip', modo === 'separadas' ? 'on' : '']" @click="modo = 'separadas'">En cuentas separadas</button>
     </div>
-    <NumeroInput v-if="modo === 'todo_junto'" v-model="total" placeholder="Total actual (ej: 2.000.000)" />
+    <NumeroInput v-if="modo === 'todo_junto'" v-model="total" placeholder="Total actual (ej: 2.000.000)" aria-label="Total actual en tus cuentas" />
     <div v-if="modo === 'separadas'" style="display: grid; gap: 8px">
       <p class="sub">Escribe cada parte y <strong>la app suma por ti</strong>. Sin restas ni cuadres.</p>
       <div v-for="(c, i) in cuentas" :key="i" class="grid-2">
-        <input v-model="c.nombre" placeholder="Ej. Banco" class="input" />
-        <NumeroInput v-model="c.monto" placeholder="Monto" />
+        <input v-model="c.nombre" placeholder="Ej. Banco" :aria-label="`Nombre de la cuenta ${i + 1}`" class="input" />
+        <NumeroInput v-model="c.monto" placeholder="Monto" :aria-label="`Monto de la cuenta ${i + 1}`" />
       </div>
       <button class="link" @click="cuentas.push({ nombre: '', tipo: 'banco', monto: 0 })">+ Agregar otra cuenta</button>
       <div class="card">
@@ -57,4 +57,4 @@ async function guardar() {
   }
 }
 </script>
-<style>/* .chip vive en tokens.css */.sub{font-size:13px;opacity:.65}.link{background:none;border:0;color:var(--ink-soft)}</style>
+<style>/* .chip vive en tokens.css */.sub{font-size:13px;color:var(--ink-soft)}</style>

@@ -3,10 +3,10 @@
     <h2>Verificación en 2 pasos</h2>
     <p class="sub">Enviamos un código de 6 dígitos a tu Gmail. Puedes copiarlo y pegarlo aquí.</p>
     <input v-model="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
-      class="input" style="font-size: 28px; letter-spacing: 0.4em; text-align: center" />
+      aria-label="Código de 6 dígitos" class="input" style="font-size: 28px; letter-spacing: 0.4em; text-align: center" />
     <button class="btn-primary" style="margin-top: 12px" @click="verificar">Entrar</button>
     <button class="link" @click="reenviar">Reenviar código</button>
-    <p v-if="e" class="alert">{{ e }}</p>
+    <p v-if="e" class="alert" role="alert" aria-live="assertive">{{ e }}</p>
     <p class="sub">Próximamente: Google Authenticator y Entrar con Google.</p>
   </main>
 </template>
@@ -42,4 +42,4 @@ async function reenviar() {
   }
 }
 </script>
-<style>.sub{font-size:13px;opacity:.65}.link{background:none;border:0;color:var(--ink-soft);margin-top:8px}</style>
+<style>.sub{font-size:13px;color:var(--ink-soft)}</style>

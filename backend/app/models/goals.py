@@ -1,7 +1,8 @@
 """Metas (Opción A: solo seguimiento, RN-09) + tablas reservadas Fase 2."""
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer,
+                        Numeric, String, Text)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import UUIDBase
@@ -57,7 +58,16 @@ class Recurring(UUIDBase):
     categoria_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("categories.id"), nullable=True)
     dia: Mapped[int] = mapped_column(Integer, default=1)  # 1-31
     frecuencia: Mapped[str] = mapped_column(String(10), default="mensual")  # mensual|quincenal|semanal
+    # Solo para semanal: 0=lunes ... 6=domingo. "Me pagan cada domingo" no se
+    # puede decir con un dia del mes, y anclarlo al 18 caia en cualquier dia de
+    # la semana el mes siguiente.
+    dia_semana: Mapped[int | None] = mapped_column(Integer, nullable=True)
     confirmado: Mapped[bool] = mapped_column(Boolean, default=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     nota: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint("dia_semana is null or (dia_semana between 0 and 6)",
+                        name="ck_recurring_dia_semana"),
+    )

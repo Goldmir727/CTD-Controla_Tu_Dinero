@@ -1,6 +1,6 @@
 """Deteccion de fijos: cuando el usuario captura algo que ya es un fijo.
 
-Por que hace falta: los fijos se declaran a mano (/plan) y tambien se capturan.
+Por que hace falta: los fijos se declaran a mano (Movimientos › Fijos) y tambien se capturan.
 El problema aparece en el choque entre los dos. El usuario ya declaro "Arriendo,
 1.200.000, dia 5" y captura "pagué el arriendo". Si la app no dice nada, el
 movimiento queda huerfano del fijo. Si crea un fijo nuevo, el usuario termina con
@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.models.finance import Transaction
 from app.models.goals import Recurring
+from app.services import recurrencia as recu
 
 # Cuanto puede moverse el monto y seguir siendo "el mismo fijo".
 # El arriendo sube 50.000 al ano y eso no es un fijo nuevo, es el mismo.
@@ -127,6 +128,8 @@ def detectar(db: Session, user_id: str, perfil_id: str, descripcion: str,
         candidatos.append({
             "id": r.id, "nombre": r.nombre, "tipo": r.tipo,
             "monto": round(float(r.monto), 2), "dia": r.dia,
+            "dia_semana": r.dia_semana,
+            "etiqueta": recu.etiqueta(r.frecuencia, r.dia, r.dia_semana),
             "frecuencia": r.frecuencia,
             "confianza": round(conf, 2),
             "motivo": _motivo(p_nombre, p_monto, p_dia),

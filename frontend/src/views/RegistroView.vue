@@ -16,7 +16,7 @@
         <i v-else class="bi bi-person-circle" style="font-size: 64px; color: var(--ink-soft)"></i>
         <div><button type="button" class="link" @click="fotoInput?.click()">{{ f.foto ? 'Cambiar foto' : 'Agregar foto (opcional)' }}</button></div>
         <input ref="fotoInput" type="file" accept="image/*" hidden @change="elegirFoto" />
-        <p v-if="eFoto" class="alert">{{ eFoto }}</p>
+        <p v-if="eFoto" class="alert" role="alert" aria-live="assertive">{{ eFoto }}</p>
       </div>
       <form @submit.prevent="go" style="display: grid; gap: 12px">
         <div class="field">
@@ -48,7 +48,7 @@
         <label class="check"><input type="checkbox" v-model="f.t" /> Acepto los <a href="#" @click.prevent="$router.push('/terminos')">Términos y Condiciones</a></label>
         <label class="check"><input type="checkbox" v-model="f.d" /> Acepto la <a href="#" @click.prevent="$router.push('/datos')">Política de Tratamiento de Datos</a> (Ley 1581 de 2012)</label>
         <button class="btn-primary" :disabled="loading || !f.t || !f.d">{{ loading ? 'Creando…' : 'Crear y continuar' }}</button>
-        <p v-if="e" class="alert">{{ e }}</p>
+        <p v-if="e" class="alert" role="alert" aria-live="assertive">{{ e }}</p>
       </form>
       <p class="sub" style="text-align: center; margin-top: 16px">¿Ya tienes cuenta? <a href="#" @click.prevent="$router.push('/login')">Iniciar sesión</a></p>
     </main>

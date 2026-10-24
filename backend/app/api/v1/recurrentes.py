@@ -7,6 +7,7 @@ confirmado=False y el usuario acepta o descarta).
 No crea movimientos: es informacion de planificacion. El motor de calculo
 (services/finanzas.py) la usa para separar fijos de variables y proyectar.
 """
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -20,6 +21,7 @@ from app.models.finance import Account, Category
 from app.models.goals import Recurring
 from app.models.user import User
 from app.services import finanzas as fin
+from app.services import recurrencia as recu
 from app.services.calculos import r2
 
 router = APIRouter(tags=["fijos"])
@@ -33,6 +35,8 @@ class RecurrenteIn(BaseModel):
     monto: float = Field(gt=0)
     dia: int = Field(default=1, ge=1, le=31)
     frecuencia: Frecuencia = "mensual"
+    # 0=lunes .. 6=domingo. Solo cuenta en un fijo semanal.
+    dia_semana: int | None = Field(default=None, ge=0, le=6)
     cuenta_id: str | None = None
     categoria_id: str | None = None
     nota: str | None = Field(default=None, max_length=255)
@@ -43,10 +47,20 @@ class RecurrentePatch(BaseModel):
     monto: float | None = Field(default=None, gt=0)
     dia: int | None = Field(default=None, ge=1, le=31)
     frecuencia: Frecuencia | None = None
+    dia_semana: int | None = Field(default=None, ge=0, le=6)
     cuenta_id: str | None = None
     categoria_id: str | None = None
     nota: str | None = Field(default=None, max_length=255)
     activo: bool | None = None
+
+
+def _dia_semana(frecuencia: str, dia_semana: int | None) -> int | None:
+    """El dia de la semana solo existe en un fijo semanal.
+
+    Guardar "domingo" en un fijo mensual deja un dato que nadie lee y que al
+    cambiar la frecuencia reaparece como si el usuario lo hubiera elegido.
+    """
+    return dia_semana if frecuencia == "semanal" else None
 
 
 def _validar_refs(db: Session, user_id: str, tipo: str,
@@ -74,9 +88,13 @@ def listar(activo: bool | None = None, db: Session = Depends(get_db),
     items = []
     for r in q.order_by(Recurring.tipo, Recurring.nombre).all():
         d = detalle.get(r.id, {})
+        prox = recu.proxima(date.today(), r.frecuencia, r.dia, r.dia_semana)
         items.append({
             "id": r.id, "nombre": r.nombre, "tipo": r.tipo, "monto": float(r.monto),
             "monto_mes": d.get("monto_mes", float(r.monto)), "dia": r.dia,
+            "dia_semana": r.dia_semana,
+            "etiqueta": recu.etiqueta(r.frecuencia, r.dia, r.dia_semana),
+            "proxima": prox.isoformat() if prox else None,
             "frecuencia": r.frecuencia, "activo": r.activo, "confirmado": r.confirmado,
             "cuenta_id": r.cuenta_id, "categoria_id": r.categoria_id,
             "categoria": cats.get(r.categoria_id), "nota": r.nota,
@@ -108,7 +126,7 @@ def proyeccion(meses: int = 6, db: Session = Depends(get_db),
     if not db.query(Recurring).filter_by(user_id=user.id, perfil_id=perfil.id).first():
         raise HTTPException(
             422,
-            "Primero marca tus ingresos y gastos fijos en Plan › Fijos. "
+            "Primero marca tus ingresos y gastos fijos en Movimientos › Fijos. "
             "Sin eso la proyección solo tendría en cuenta tu promedio.",
         )
     return fin.proyeccion(db, user.id, perfil.id, fin.mes_actual(), meses)
@@ -120,6 +138,7 @@ def crear(data: RecurrenteIn, db: Session = Depends(get_db),
     _validar_refs(db, user.id, data.tipo, data.cuenta_id, data.categoria_id)
     r = Recurring(user_id=user.id, perfil_id=perfil.id, nombre=data.nombre.strip(), tipo=data.tipo,
                   monto=data.monto, dia=data.dia, frecuencia=data.frecuencia,
+                  dia_semana=_dia_semana(data.frecuencia, data.dia_semana),
                   cuenta_id=data.cuenta_id, categoria_id=data.categoria_id,
                   nota=data.nota, activo=True, confirmado=True)
     db.add(r)
@@ -140,6 +159,7 @@ def editar(rec_id: str, data: RecurrentePatch, db: Session = Depends(get_db),
                       campos.get("categoria_id", r.categoria_id))
     for k, v in campos.items():
         setattr(r, k, v)
+    r.dia_semana = _dia_semana(r.frecuencia, r.dia_semana)
     db.commit()
     return {"id": r.id, "monto_mes": r2(float(r.monto) * fin.FACTOR_FRECUENCIA[r.frecuencia])}
 

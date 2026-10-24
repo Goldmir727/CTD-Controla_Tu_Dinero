@@ -14,7 +14,9 @@ const TABS = [
   { id: 'categorias', label: 'Categorías' },
   { id: 'comparativa', label: 'Evolución' },
   { id: 'fijos', label: 'Fijos' },
-  { id: 'calendario', label: 'Calendario' }
+  // El calendario de verdad vive ahora en /agenda (gratis). Esta pestaña es el
+  // ritmo diario en barras, PRO; llamarla "Calendario" confundia con la otra.
+  { id: 'calendario', label: 'Por día' }
 ] as const
 type Tab = (typeof TABS)[number]['id']
 
@@ -226,7 +228,7 @@ const opcionCalendario = computed(() => {
       <i class="bi bi-lock-fill"></i>
       <div>
         <strong>Reportes detallados · PRO</strong>
-        <p>{{ mensajePro || 'Activa tu plan PRO para ver fijos, calendario y comparativas completas.' }}</p>
+        <p>{{ mensajePro || 'Activa tu plan PRO para ver fijos, el ritmo día por día y comparativas completas.' }}</p>
       </div>
       <button class="btn-mint" @click="$router.push('/pro')">Ver plan</button>
     </div>
@@ -317,7 +319,7 @@ const opcionCalendario = computed(() => {
         <div class="card">
           <h3>Fijos vs variables</h3>
           <Grafico v-if="fijos.length" :opcion="opcionFijos" :alto="260" />
-          <p v-else class="empty">Marcá tus gastos fijos en Plan › Fijos para ver este gráfico.</p>
+          <p v-else class="empty">Marcá tus ingresos y gastos fijos en Movimientos › Fijos para ver este gráfico.</p>
         </div>
         <div v-if="fijos.length" class="card">
           <h3>Tus fijos declarados</h3>
@@ -333,7 +335,7 @@ const opcionCalendario = computed(() => {
 
     <!-- CALENDARIO -->
     <template v-else-if="tab === 'calendario'">
-      <div v-if="!pro" class="card empty">Activa PRO para ver el calendario de gastos.</div>
+      <div v-if="!pro" class="card empty">Activa PRO para ver tu gasto día por día. El calendario de movimientos está gratis en Agenda.</div>
       <template v-else>
         <div v-if="calendario" class="card">
           <h3>Gasto por día · {{ mesEs(mes) }}</h3>
@@ -381,7 +383,7 @@ h3 { font-size: 15px; margin: 0 0 10px; }
 .tabla th { color: var(--ink-soft); font-weight: 600; }
 
 .card.pro { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.card.pro i { font-size: 20px; color: var(--warning); }
+.card.pro i { font-size: 20px; color: var(--warning-text); }
 .card.pro div { flex: 1; }
 .card.pro p { margin: 4px 0 0; font-size: 13px; color: var(--ink-soft); }
 </style>

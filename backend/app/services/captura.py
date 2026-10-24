@@ -18,7 +18,7 @@ POST /captura/confirmar.
 """
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 from sqlalchemy.orm import Session
@@ -97,6 +97,32 @@ TOOL = {
                                 "description": "true si es un gasto recurrente fijo "
                                               "(arriendo, servicio, suscripción, cuota).",
                             },
+                            # type como lista para admitir null, igual que "fecha".
+                            "frecuencia": {
+                                "type": ["string", "null"],
+                                "description": (
+                                    "La periodicidad que el texto declara: 'mensual', "
+                                    "'quincenal' o 'semanal'. 'cada quincena' es "
+                                    "quincenal, 'cada semana' semanal, 'cada mes' "
+                                    "mensual. Solo si el texto la dice; si no, null."
+                                ),
+                            },
+                            "dia_fijo": {
+                                "type": ["integer", "null"],
+                                "description": (
+                                    "Dia del mes (1-31) en que cae el fijo, si el texto "
+                                    "lo dice ('el 20 de cada mes'). null si no lo dice."
+                                ),
+                            },
+                            "dia_semana": {
+                                "type": ["integer", "null"],
+                                "description": (
+                                    "Para un fijo semanal, el dia de la semana en que "
+                                    "cae: 0=lunes, 1=martes, 2=miercoles, 3=jueves, "
+                                    "4=viernes, 5=sabado, 6=domingo. 'me pagan cada "
+                                    "domingo' es 6. null si el texto no nombra un dia."
+                                ),
+                            },
                         },
                         "required": ["tipo", "monto", "categoria", "descripcion"],
                     },
@@ -120,12 +146,18 @@ Vocabulario colombiano:
 
 Reglas que no puedes romper:
 - Un texto puede traer VARIOS movimientos. Sácalos todos, uno por llamada.
+- "me pagan", "me transfirieron", "gané" son INGRESOS; "pagué" es gasto.
 - NUNCA inventes un monto. Si el texto no dice cuánto, pon 0.
 - NUNCA inventes un movimiento. Si el texto no habla de plata (salvo que ya te
   digamos que hay indicios), llama a la herramienta con la lista VACÍA. Es
   preferible decir "no vi nada" que inventar un gasto de monto cero.
 - La categoría debe ser una de la lista.
-- El monto va como número plano: 18.000 es 18000, "1,5 millones" es 1500000."""
+- El monto va como número plano: 18.000 es 18000, "1,5 millones" es 1500000,
+  "un millón y medio" es 1500000.
+- Si el texto declara periodicidad ("cada quincena", "cada semana", "cada 15
+  días"), pon fijo=true Y la frecuencia que dijo. Si no la declara, null.
+- Un día de la semana con "cada" o "todos los" ("cada domingo", "todos los
+  viernes") es un fijo SEMANAL: pon esa frecuencia y el día en dia_semana."""
 
 
 class CapturaError(Exception):
@@ -404,6 +436,39 @@ def _validar(crudos: list, texto: str, pistas: dict, db: Session,
         if fecha > hoy:
             fecha = hoy
 
+        # Frecuencia del fijo: primero la del modelo ('cada quincena' del texto);
+        # si no la trajo o trajo basura, la regla determinista la busca igual.
+        # Si ninguna la vio, queda None y la confirmación crea el fijo mensual
+        # con el día del movimiento, como siempre.
+        frec_modelo = str(c.get("frecuencia") or "").strip().lower()
+        frecuencia = frec_modelo if frec_modelo in ("mensual", "quincenal", "semanal") \
+            else co.frecuencia_por_texto(texto)
+        dia_fijo = None
+        try:
+            d = int(c.get("dia_fijo"))
+            if 1 <= d <= 31:
+                dia_fijo = d
+        except (TypeError, ValueError):
+            pass
+        # "me pagan 63 mil cada domingo": el modelo trae el dia de la semana; si
+        # no, la regla determinista lo busca igual. Solo tiene sentido si el
+        # fijo es semanal, asi que en los demas casos se descarta.
+        dia_semana = None
+        try:
+            ds = int(c.get("dia_semana"))
+            if 0 <= ds <= 6:
+                dia_semana = ds
+        except (TypeError, ValueError):
+            pass
+        if dia_semana is None:
+            dia_semana = co.dia_semana_por_texto(texto)
+        if frecuencia != "semanal":
+            dia_semana = None
+        # Un semanal sin dia del mes declarado cae en el ultimo dia de ese dia de
+        # la semana que ya paso: asi el fijo nace con una fecha real y no con el 1.
+        if dia_semana is not None and dia_fijo is None:
+            dia_fijo = (hoy - timedelta(days=(hoy.weekday() - dia_semana) % 7)).day
+
         # El monto aparece tal cual en el texto? Si no, el modelo lo dedujo y hay
         # que pedir confirmacion explicita (decision del usuario).
         monto_explicito = monto > 0 and (round(monto, 2) in montos_texto)
@@ -425,6 +490,9 @@ def _validar(crudos: list, texto: str, pistas: dict, db: Session,
             "metodo": met.nombre if met else None,
             "fecha": fecha.isoformat(),
             "fijo": bool(c.get("fijo")),
+            "frecuencia": frecuencia,
+            "dia_fijo": dia_fijo,
+            "dia_semana": dia_semana,
         })
 
     pendientes = [p for p in propuestos if p["requiere_confirmacion_monto"]]

@@ -262,7 +262,7 @@ defineExpose({ abrir, abrirEnRuta, pendiente, cerrar, alNavegar })
 </template>
 
 <style scoped>
-.tour { position: fixed; inset: 0; z-index: 90; }
+.tour { position: fixed; inset: 0; z-index: var(--z-tour); }
 /* El fondo es el que oscurece y el que bloquea. Antes el oscurecido venia del
    box-shadow del agujero, asi que cuando un paso no encontraba su elemento
    (por ejemplo la alerta, que solo existe a veces) el modal quedaba sin fondo y
@@ -293,7 +293,9 @@ defineExpose({ abrir, abrirEnRuta, pendiente, cerrar, alNavegar })
 }
 /* Unica salida del modal. */
 .tour-cerrar {
-  position: absolute; top: 10px; right: 10px;
+  position: absolute; top: 8px; right: 8px;
+  min-height: 44px; min-width: 64px;
+  display: inline-flex; align-items: center; justify-content: center;
   background: none; border: 1px solid var(--line); border-radius: 99px;
   color: var(--ink-soft); font-size: 12px; font-weight: 700;
   padding: 5px 12px; cursor: pointer;
@@ -301,7 +303,7 @@ defineExpose({ abrir, abrirEnRuta, pendiente, cerrar, alNavegar })
 .tour-cerrar:hover { color: var(--ink); border-color: var(--mint); }
 .tour-contador {
   margin: 0 0 6px; padding-right: 64px; font-size: 11px; letter-spacing: .1em;
-  color: var(--mint-dark); font-weight: 800; text-transform: uppercase;
+  color: var(--mint-text); font-weight: 800; text-transform: uppercase;
 }
 .tour-card h3 { margin: 0 0 8px; font-size: 17px; line-height: 1.25; }
 .tour-texto { margin: 0 0 14px; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
@@ -314,14 +316,14 @@ defineExpose({ abrir, abrirEnRuta, pendiente, cerrar, alNavegar })
 .tour-botones { display: flex; align-items: center; gap: 8px; }
 .tour-saltar, .tour-atras {
   background: none; border: 0; color: var(--ink-soft);
-  font-size: 13px; cursor: pointer; padding: 8px 4px;
+  font-size: 13px; cursor: pointer; padding: 8px 4px; min-height: 44px;
 }
 .tour-saltar:hover, .tour-atras:hover { color: var(--ink); }
 .tour-sig {
   background: var(--mint); color: var(--navy); border: 0;
-  border-radius: 10px; padding: 10px 18px; font-weight: 800; cursor: pointer;
+  border-radius: 10px; padding: 10px 18px; min-height: 44px; font-weight: 800; cursor: pointer;
 }
 .tour-sig:hover { background: var(--mint-dark); }
-.tour-pie { margin: 10px 0 0; font-size: 11px; color: var(--ink-soft); opacity: .8; }
+.tour-pie { margin: 10px 0 0; font-size: 12px; color: var(--ink-soft); }
 .tour-flecha { display: none; }
 </style>
