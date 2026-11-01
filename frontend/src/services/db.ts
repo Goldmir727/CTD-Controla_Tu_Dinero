@@ -15,6 +15,7 @@ type MovimientoLocal = {
   recurrente_id: string | null
   idempotency_key: string | null
   created_at: string
+  pendiente?: boolean
 }
 
 type RecurrenteLocal = {
@@ -32,6 +33,7 @@ type RecurrenteLocal = {
   nota: string | null
   perfil_id?: string
   created_at: string
+  pendiente?: boolean
 }
 
 type PerfilLocal = {
@@ -268,6 +270,14 @@ export async function encolarSincronizacion(item: Omit<SyncItem, 'id' | 'created
 export async function obtenerColaSincronizacion(): Promise<SyncItem[]> {
   const db = await getDB()
   return db.getAllFromIndex('sync_queue', 'by-created')
+}
+
+export async function actualizarItemCola(id: number, cambios: Partial<SyncItem>): Promise<void> {
+  const db = await getDB()
+  const item = await db.get('sync_queue', id)
+  if (item) {
+    await db.put('sync_queue', { ...item, ...cambios })
+  }
 }
 
 export async function removerDeCola(id: number): Promise<void> {

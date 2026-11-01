@@ -4,6 +4,7 @@ import {
   obtenerColaSincronizacion,
   removerDeCola,
   actualizarReintentos,
+  actualizarItemCola,
   guardarMovimientoLocal,
   obtenerMovimientosLocales,
   eliminarMovimientoLocal,
@@ -107,13 +108,14 @@ function perfilActivo(): string {
   return localStorage.getItem('ctd-perfil') ?? ''
 }
 
-function aLocal(m: Movimiento): MovimientoLocal {
+export function aLocal(m: Movimiento): MovimientoLocal {
   return {
     id: m.id, perfil_id: m.perfil_id || perfilActivo(), tipo: m.tipo, monto: m.monto,
     descripcion: m.descripcion ?? '', categoria: m.categoria ?? null, cuenta: m.cuenta ?? null,
     fecha: m.fecha, cuenta_id: m.cuenta_id ?? null, categoria_id: m.categoria_id ?? null,
     metodo_id: m.metodo_id ?? null, recurrente_id: m.recurrente_id ?? null,
     idempotency_key: m.idempotency_key ?? null, created_at: m.created_at ?? '',
+    pendiente: false,
   }
 }
 
@@ -131,6 +133,12 @@ export async function listarMovimientos(perfilId?: string): Promise<Movimiento[]
       params: { perfil_id: perfilId, page_size: 200 },
     })
     const lista = Array.isArray(data) ? data : data.items ?? []
+    // Evita duplicados al volver a tener red: se borran las copias locales que
+    // ya llegaron al servidor, conservando las que todavia estan pendientes.
+    const locales = await obtenerMovimientosLocales(perfilId || undefined)
+    for (const l of locales) {
+      if (!l.pendiente) await eliminarMovimientoLocal(l.id)
+    }
     for (const m of lista) {
       await guardarMovimientoLocal(aLocal({ ...m, perfil_id: m.perfil_id || perfilId }))
     }
@@ -157,7 +165,7 @@ export async function crearMovimiento(m: NuevoMovimiento): Promise<Movimiento> {
   }
 
   // Siempre guardar localmente primero
-  await guardarMovimientoLocal(aLocal(local))
+  await guardarMovimientoLocal({ ...aLocal(local), pendiente: true })
 
   if (!online) {
     await encolarSincronizacion({
@@ -191,6 +199,17 @@ export async function crearMovimiento(m: NuevoMovimiento): Promise<Movimiento> {
 }
 
 export async function eliminarMovimiento(id: string): Promise<void> {
+  const locales = await obtenerMovimientosLocales()
+  const local = locales.find((m) => m.id === id)
+
+  if (local?.pendiente) {
+    await eliminarMovimientoLocal(id)
+    const cola = await obtenerColaSincronizacion()
+    const item = cola.find((i) => i.type === 'movimiento' && i.method === 'POST' && i.payload?.id === id)
+    if (item?.id) await removerDeCola(item.id)
+    return
+  }
+
   await eliminarMovimientoLocal(id)
   if (!online) {
     await encolarSincronizacion({
@@ -203,7 +222,9 @@ export async function eliminarMovimiento(id: string): Promise<void> {
   }
   try {
     await api.delete(`/movimientos/${id}`)
-  } catch {
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 404) return
     await encolarSincronizacion({
       type: 'eliminar_movimiento',
       payload: { id },
@@ -215,12 +236,20 @@ export async function eliminarMovimiento(id: string): Promise<void> {
 }
 
 export async function editarMovimiento(id: string, cambios: Partial<Movimiento>): Promise<void> {
-  // Aplicar cambios localmente inmediatamente (optimista)
   const locales = await obtenerMovimientosLocales()
   const local = locales.find((m) => m.id === id)
   if (local) {
     const actualizado: MovimientoLocal = { ...local, ...cambios }
     await guardarMovimientoLocal(actualizado)
+  }
+
+  if (local?.pendiente) {
+    const cola = await obtenerColaSincronizacion()
+    const item = cola.find((i) => i.type === 'movimiento' && i.method === 'POST' && i.payload?.id === id)
+    if (item?.id) {
+      await actualizarItemCola(item.id, { payload: { ...item.payload, ...cambios } })
+    }
+    return
   }
 
   if (!online) {
@@ -234,7 +263,9 @@ export async function editarMovimiento(id: string, cambios: Partial<Movimiento>)
   }
   try {
     await api.patch(`/movimientos/${id}`, cambios)
-  } catch {
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 404) return
     await encolarSincronizacion({
       type: 'movimiento',
       payload: { ...local, ...cambios },
@@ -259,6 +290,10 @@ export async function listarRecurrentes(perfilId?: string): Promise<{ items: Rec
     const lista = Array.isArray(data) ? data : data.items ?? []
     const resumen = Array.isArray(data) ? null : data.resumen ?? null
     const filtrado = perfilId ? lista.filter((r) => r.perfil_id === perfilId || !r.perfil_id) : lista
+    const locales = await obtenerRecurrentesLocales(perfilId)
+    for (const l of locales) {
+      if (!l.pendiente) await eliminarRecurrenteLocal(l.id)
+    }
     for (const r of filtrado) {
       await guardarRecurrenteLocal({
         id: r.id, nombre: r.nombre, tipo: r.tipo, monto: r.monto,
@@ -298,6 +333,7 @@ export async function crearRecurrente(r: Omit<Recurrente, 'id' | 'created_at'>):
     frecuencia: local.frecuencia, dia_semana: local.dia_semana,
     confirmado: local.confirmado, activo: local.activo, nota: local.nota,
     perfil_id: local.perfil_id, created_at: String(local.created_at),
+    pendiente: true,
   })
 
   if (!online) {
@@ -311,18 +347,19 @@ export async function crearRecurrente(r: Omit<Recurrente, 'id' | 'created_at'>):
   }
 
   try {
-    const { data } = await api.post<Recurrente>('/recurrentes', r)
-    if (data.id !== local.id) {
+    const { data } = await api.post<{ id: string; monto_mes?: number }>('/recurrentes', r)
+    if (data.id && data.id !== local.id) {
       await eliminarRecurrenteLocal(local.id)
       await guardarRecurrenteLocal({
-        id: data.id, nombre: data.nombre, tipo: data.tipo, monto: data.monto,
-        cuenta_id: data.cuenta_id, categoria_id: data.categoria_id, dia: data.dia,
-        frecuencia: data.frecuencia, dia_semana: data.dia_semana,
-        confirmado: data.confirmado, activo: data.activo, nota: data.nota,
-        perfil_id: data.perfil_id, created_at: data.created_at ?? '',
+        id: data.id, nombre: r.nombre, tipo: r.tipo, monto: r.monto,
+        cuenta_id: r.cuenta_id, categoria_id: r.categoria_id, dia: r.dia,
+        frecuencia: r.frecuencia, dia_semana: r.dia_semana,
+        confirmado: r.confirmado, activo: r.activo, nota: r.nota,
+        perfil_id: r.perfil_id, created_at: new Date().toISOString(),
+        pendiente: false,
       })
     }
-    return data
+    return { ...local, id: data.id ?? local.id, monto_mes: data.monto_mes ?? local.monto_mes }
   } catch (err) {
     await encolarSincronizacion({
       type: 'recurrente',
@@ -335,6 +372,17 @@ export async function crearRecurrente(r: Omit<Recurrente, 'id' | 'created_at'>):
 }
 
 export async function eliminarRecurrente(id: string): Promise<void> {
+  const locales = await obtenerRecurrentesLocales()
+  const local = locales.find((r) => r.id === id)
+
+  if (local?.pendiente) {
+    await eliminarRecurrenteLocal(id)
+    const cola = await obtenerColaSincronizacion()
+    const item = cola.find((i) => i.type === 'recurrente' && i.method === 'POST' && i.payload?.id === id)
+    if (item?.id) await removerDeCola(item.id)
+    return
+  }
+
   await eliminarRecurrenteLocal(id)
   if (!online) {
     await encolarSincronizacion({
@@ -347,7 +395,9 @@ export async function eliminarRecurrente(id: string): Promise<void> {
   }
   try {
     await api.delete(`/recurrentes/${id}`)
-  } catch {
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 404) return
     await encolarSincronizacion({
       type: 'eliminar_recurrente',
       payload: { id },
@@ -366,6 +416,15 @@ export async function editarRecurrente(id: string, cambios: Partial<Recurrente>)
     await guardarRecurrenteLocal(actualizado)
   }
 
+  if (local?.pendiente) {
+    const cola = await obtenerColaSincronizacion()
+    const item = cola.find((i) => i.type === 'recurrente' && i.method === 'POST' && i.payload?.id === id)
+    if (item?.id) {
+      await actualizarItemCola(item.id, { payload: { ...item.payload, ...cambios } })
+    }
+    return
+  }
+
   if (!online) {
     await encolarSincronizacion({
       type: 'recurrente',
@@ -377,7 +436,9 @@ export async function editarRecurrente(id: string, cambios: Partial<Recurrente>)
   }
   try {
     await api.patch(`/recurrentes/${id}`, cambios)
-  } catch {
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 404) return
     await encolarSincronizacion({
       type: 'recurrente',
       payload: { ...local, ...cambios },
@@ -389,10 +450,21 @@ export async function editarRecurrente(id: string, cambios: Partial<Recurrente>)
 }
 
 export async function toggleRecurrente(id: string): Promise<void> {
+  const locales = await obtenerRecurrentesLocales()
+  const local = locales.find((r) => r.id === id)
+
+  if (local?.pendiente) {
+    await guardarRecurrenteLocal({ ...local, activo: !local.activo })
+    const cola = await obtenerColaSincronizacion()
+    const item = cola.find((i) => i.type === 'recurrente' && i.method === 'POST' && i.payload?.id === id)
+    if (item?.id) {
+      await actualizarItemCola(item.id, { payload: { ...item.payload, activo: !local.activo } })
+    }
+    return
+  }
+
   if (!online) {
     // Toggle optimista localmente
-    const locales = await obtenerRecurrentesLocales()
-    const local = locales.find((r) => r.id === id)
     if (local) {
       await guardarRecurrenteLocal({ ...local, activo: !local.activo })
     }
@@ -406,11 +478,13 @@ export async function toggleRecurrente(id: string): Promise<void> {
   }
   try {
     await api.patch(`/recurrentes/${id}/toggle`)
-  } catch {
-    const locales = await obtenerRecurrentesLocales()
-    const local = locales.find((r) => r.id === id)
-    if (local) {
-      await guardarRecurrenteLocal({ ...local, activo: !local.activo })
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 404) return
+    const locales2 = await obtenerRecurrentesLocales()
+    const local2 = locales2.find((r) => r.id === id)
+    if (local2) {
+      await guardarRecurrenteLocal({ ...local2, activo: !local2.activo })
     }
     await encolarSincronizacion({
       type: 'recurrente',
@@ -504,11 +578,40 @@ export async function procesarColaSincronizacion(): Promise<{ ok: number; fail: 
         // La clave de idempotencia evita duplicar si el envio se corta y se
         // reintenta: el servidor devuelve el movimiento que ya tenia.
         const clave = item.payload?.idempotency_key
-        await api.post(
+        const res = await api.post(
           item.endpoint,
           item.payload,
           clave ? { headers: { 'Idempotency-Key': String(clave) } } : undefined,
         )
+        // Reemplaza la copia local pendiente por la version ya guardada en el
+        // servidor, para no dejar ids temporales ni duplicados.
+        if (item.type === 'movimiento' && item.payload?.id) {
+          await eliminarMovimientoLocal(item.payload.id)
+          await guardarMovimientoLocal(aLocal({
+            ...res.data,
+            perfil_id: res.data?.perfil_id || item.payload.perfil_id,
+            idempotency_key: item.payload.idempotency_key,
+          }))
+        } else if (item.type === 'recurrente' && item.payload?.id) {
+          await eliminarRecurrenteLocal(item.payload.id)
+          await guardarRecurrenteLocal({
+            id: res.data?.id || item.payload.id,
+            nombre: item.payload.nombre,
+            tipo: item.payload.tipo,
+            monto: item.payload.monto,
+            cuenta_id: item.payload.cuenta_id ?? null,
+            categoria_id: item.payload.categoria_id ?? null,
+            dia: item.payload.dia,
+            frecuencia: item.payload.frecuencia,
+            dia_semana: item.payload.dia_semana ?? null,
+            confirmado: item.payload.confirmado ?? true,
+            activo: item.payload.activo ?? true,
+            nota: item.payload.nota ?? null,
+            perfil_id: item.payload.perfil_id,
+            created_at: new Date().toISOString(),
+            pendiente: false,
+          })
+        }
       } else if (item.method === 'PATCH') {
         await api.patch(item.endpoint, item.payload)
       } else if (item.method === 'DELETE') {
@@ -516,7 +619,13 @@ export async function procesarColaSincronizacion(): Promise<{ ok: number; fail: 
       }
       await removerDeCola(item.id!)
       ok++
-    } catch {
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 404) {
+        await removerDeCola(item.id!)
+        ok++
+        continue
+      }
       fail++
       await actualizarReintentos(item.id!, (item.retries ?? 0) + 1)
       // Si ya reintento muchas veces, remover para no bloquear la cola
