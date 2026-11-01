@@ -1,17 +1,20 @@
 import smtplib
+import uuid
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.legal import DATOS_VERSION, TERMINOS_VERSION
 from app.core.deps import get_current_user, get_perfil
-from app.core.ratelimit import login_limit, pw_confirmar_limit, pw_solicitar_limit, solicitar_limit, verificar_limit
+from app.core.legal import DATOS_VERSION, TERMINOS_VERSION
+from app.core.ratelimit import ip_cliente, login_limit, pw_confirmar_limit, pw_solicitar_limit, solicitar_limit, verificar_limit
 from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 from app.models.finance import Account, Budget, Category, PaymentMethod, Transaction
 from app.models.perfil import Perfil
+from app.models.sesion import UserSession
 from app.models.user import User
-from app.schemas.auth import ConsentimientoIn, CorreoCambiarIn, LoginIn, LoginOut, OnboardingIn, PasswordConfirmarIn, PasswordSolicitarIn, RefreshIn, RegistroIn, TokenOut, TwoFaActivarIn, TwoFaSolicitarIn, TwoFaVerificarIn, UserOut, UserPatch, user_out
+from app.schemas.auth import ConsentimientoIn, CorreoCambiarIn, LoginIn, LoginOut, OnboardingIn, PasswordConfirmarIn, PasswordSolicitarIn, RefreshIn, RegistroIn, SesionOut, TokenOut, TwoFaActivarIn, TwoFaSolicitarIn, TwoFaVerificarIn, UserOut, UserPatch, user_out
 from app.services import paises
 from app.services import password_reset as pw_svc
 from app.services import twofa as twofa_svc
@@ -94,7 +97,7 @@ def _sembrar_perfil(db: Session, user_id: str, perfil_id: str) -> None:
 
 
 @router.post("/auth/login", response_model=LoginOut, dependencies=[Depends(login_limit)])
-def login(data: LoginIn, db: Session = Depends(get_db)):
+def login(data: LoginIn, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter_by(correo=data.correo).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
@@ -106,15 +109,59 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
         except smtplib.SMTPException:
             raise HTTPException(status_code=502, detail="No se pudo enviar el código al correo. Revisa la configuración SMTP o intenta más tarde.")
         return LoginOut(requires_2fa=True)
-    return LoginOut(requires_2fa=False, access_token=create_access_token(user.id), refresh_token=create_refresh_token(user.id))
+
+    # Registrar / actualizar sesion de dispositivo
+    device_id = data.device_id or str(uuid.uuid4())
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    expira = ahora + timedelta(days=7)
+    sesion = db.query(UserSession).filter_by(user_id=user.id, device_id=device_id).first()
+    if sesion:
+        sesion.is_active = True
+        sesion.expires_at = expira
+        sesion.last_active_at = ahora
+        if data.device_name:
+            sesion.device_name = data.device_name
+    else:
+        sesion = UserSession(
+            user_id=user.id,
+            device_id=device_id,
+            device_name=data.device_name,
+            ip_address=ip_cliente(request),
+            user_agent=request.headers.get("user-agent"),
+            expires_at=expira,
+        )
+        db.add(sesion)
+    db.flush()
+
+    return LoginOut(
+        requires_2fa=False,
+        access_token=create_access_token(user.id),
+        refresh_token=create_refresh_token(user.id),
+        device_id=device_id,
+    )
 
 
 @router.post("/auth/refresh", response_model=TokenOut)
-def refresh(data: RefreshIn, db: Session = Depends(get_db)):
+def refresh(data: RefreshIn, request: Request, db: Session = Depends(get_db)):
     user_id = decode_token(data.refresh_token, want="refresh")
     if not user_id or not db.get(User, user_id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh inválido o vencido")
-    # Rotación: cada uso emite un refresh nuevo; el anterior queda obsoleto en cliente.
+
+    # Validar que la sesion del dispositivo siga activa.
+    device_id = request.headers.get("x-device-id")
+    if device_id:
+        sesion = (
+            db.query(UserSession)
+            .filter_by(user_id=user_id, device_id=device_id)
+            .first()
+        )
+        if sesion and not sesion.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sesion revocada en este dispositivo. Inicia sesion de nuevo.",
+            )
+
+    # Rotacion: cada uso emite un refresh nuevo; el anterior queda obsoleto en cliente.
     return TokenOut(access_token=create_access_token(user_id), refresh_token=create_refresh_token(user_id))
 
 

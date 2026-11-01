@@ -119,12 +119,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
 import SeccionFijos from '../components/SeccionFijos.vue'
+import { listarMovimientos, eliminarMovimiento, listarCuentas, listarCategorias, listarMetodosPago, listarPerfiles, editarMovimiento } from '../services/repository'
 import api from '../services/api'
+import { useOffline } from '../stores/offline'
 import { useDialog } from '../composables/useDialog'
 import { confirmar } from '../composables/useConfirm'
 import { useToast } from '../composables/useToast'
 import { codigo, numero } from '../utils/formato'
-type Mov = { id: string; tipo: string; monto: number; fecha: string; descripcion: string; categoria_id?: string; cuenta_id?: string; metodo_id?: string | null; categoria?: string; cuenta?: string }
+type Mov = { id: string; tipo: string; monto: number; fecha: string; descripcion: string; categoria_id?: string | null; cuenta_id?: string | null; metodo_id?: string | null; categoria?: string; cuenta?: string; perfil_id?: string }
 const route = useRoute(); const router = useRouter()
 // "Movimientos?tab=fijos" abre directo en la pestaña de fijos (atajo desde Inicio).
 const seccion = ref(route.query.tab === 'fijos' ? 'fijos' : 'movs')
@@ -134,8 +136,6 @@ function irASec(s: 'movs' | 'fijos') {
 }
 const filtro = ref('todos'); const q = ref(''); const mes = ref(new Date().toISOString().slice(0, 7))
 const items = ref<Mov[]>([])
-// La moneda es la del usuario, no una suposicion: si esta en USD, el selector
-// de cuenta y metodo ya muestran simbolos distintos y el codigo debe acorde.
 const moneda = ref('COP')
 const cod = computed(() => codigo(moneda.value)); const cuentas = ref<{ id: string; nombre: string }[]>([]); const categorias = ref<{ id: string; nombre: string; tipo: string }[]>([])
 const metodos = ref<{ id: string; nombre: string }[]>([])
@@ -143,6 +143,7 @@ const sheet = ref(false); const filtroSheet = ref<HTMLElement | null>(null)
 const cuentaId = ref(''); const categoriaId = ref(''); const orden = ref('recientes')
 const loading = ref(true)
 const toast = useToast()
+const offline = useOffline()
 
 useDialog(sheet, filtroSheet, () => { sheet.value = false })
 const label = (f: string) => f === 'todos' ? 'Todos' : f === 'ingreso' ? 'Ingresos' : 'Gastos'
@@ -151,9 +152,6 @@ const cuentaNombre = computed(() => cuentas.value.find((c) => c.id === cuentaId.
 const categoriaNombre = computed(() => categorias.value.find((c) => c.id === categoriaId.value)?.nombre ?? 'todas')
 
 // ---- Editar un movimiento ----
-// El caso real: "gasté 200 en un dulce" queda como $200 pero era un desayuno
-// de $8.000, o al reves. Antes habia que borrar y volver a capturar, y con la
-// captura rapida el usuario lo hacia mal de nuevo la mitad de las veces.
 const editando = ref<Mov | null>(null)
 const editSheet = ref<HTMLElement | null>(null)
 const guardando = ref(false)
@@ -182,32 +180,47 @@ async function guardarEdicion() {
   if (!ed.cuenta_id) { edError.value = 'Elige una cuenta: el saldo de todas depende de esto.'; return }
   guardando.value = true
   try {
-    await api.patch(`/movimientos/${editando.value.id}`, {
+    await editarMovimiento(editando.value.id, {
       tipo: ed.tipo, monto: ed.monto, fecha: ed.fecha, descripcion: ed.descripcion,
       categoria_id: ed.categoria_id || null, cuenta_id: ed.cuenta_id,
       metodo_id: ed.metodo_id || null
     })
     cerrarEdicion(); await cargar()
   } catch (e: any) {
-    edError.value = e?.response?.data?.detail ?? 'No se pudo guardar.'
+    edError.value = e?.message ?? 'No se pudo guardar.'
   } finally { guardando.value = false }
 }
 async function borrarEditando() {
   if (!editando.value) return
   if (!(await confirmar({ titulo: '¿Eliminar este movimiento?', mensaje: 'Se quita de la cuenta y del historial. No se puede deshacer.', ok: 'Eliminar', peligro: true }))) return
-  await api.delete(`/movimientos/${editando.value.id}`); toast.mostrar('Movimiento eliminado')
+  try {
+    await eliminarMovimiento(editando.value.id)
+    toast.mostrar('Movimiento eliminado')
+  } catch (e: any) {
+    toast.mostrar(e?.message ?? 'No se pudo eliminar.')
+  }
   cerrarEdicion(); await cargar()
 }
 async function cargar() {
   loading.value = true
   try {
-    const { data } = await api.get('/movimientos', { params: { tipo: filtro.value === 'todos' ? undefined : filtro.value, q: q.value || undefined, cuenta_id: cuentaId.value || undefined, categoria_id: categoriaId.value || undefined, page_size: 100 } })
-    let list: Mov[] = data.items
+    const list = await listarMovimientos(perfilId.value || undefined)
     const catMap = Object.fromEntries(categorias.value.map((c) => [c.id, c.nombre]))
     const cueMap = Object.fromEntries(cuentas.value.map((c) => [c.id, c.nombre]))
-    list = list.map((m) => ({ ...m, categoria: catMap[m.categoria_id ?? ''] ?? '', cuenta: cueMap[m.cuenta_id ?? ''] ?? '' }))
-    if (orden.value === 'monto') list = [...list].sort((a, b) => b.monto - a.monto)
-    items.value = list
+    const mapped = list.map((m) => ({ ...m, categoria: catMap[m.categoria_id ?? ''] ?? '', cuenta: cueMap[m.cuenta_id ?? ''] ?? '' }))
+    // Filtros y busqueda se aplican aqui y no en la API: sin red no hay API y
+    // antes los chips no hacian nada aunque parecia que si.
+    const texto = q.value.trim().toLowerCase()
+    const visibles = mapped.filter((m) =>
+      (filtro.value === 'todos' || m.tipo === filtro.value)
+      && (!cuentaId.value || m.cuenta_id === cuentaId.value)
+      && (!categoriaId.value || m.categoria_id === categoriaId.value)
+      && (!texto || `${m.descripcion ?? ''} ${m.categoria ?? ''} ${m.cuenta ?? ''}`.toLowerCase().includes(texto))
+    )
+    let sorted = visibles
+    if (orden.value === 'monto') sorted = [...sorted].sort((a, b) => b.monto - a.monto)
+    else sorted = [...sorted].sort((a, b) => b.fecha.localeCompare(a.fecha))
+    items.value = sorted
   } finally { loading.value = false }
 }
 const grupos = computed(() => {
@@ -220,16 +233,47 @@ const grupos = computed(() => {
   }
   return [...map.entries()].map(([titulo, items]) => ({ titulo, items }))
 })
+const perfilId = ref('')
+/**
+ * Todo lo que necesita la vista sale del repositorio: si no hay red responde la
+ * copia local. Antes se pedia a la API en un Promise.all y, al rechazar sin
+ * conexion, la vista se quedaba con las cuentas vacias, sin perfil y con el
+ * esqueleto de carga para siempre.
+ */
 onMounted(async () => {
   const [cu, ca, me] = await Promise.all([
-    api.get('/cuentas'),
-    api.get('/categorias', { params: { solo_activas: false } }),
-    api.get('/metodos-pago').catch(() => ({ data: [] }))
+    listarCuentas().catch(() => []),
+    listarCategorias().catch(() => []),
+    listarMetodosPago().catch(() => []),
   ])
-  cuentas.value = cu.data; categorias.value = ca.data; metodos.value = me.data
-  api.get('/auth/me').then(({ data }) => { moneda.value = data.moneda ?? 'COP' }).catch(() => {})
+  cuentas.value = cu.map((c) => ({ id: c.id, nombre: c.nombre }))
+  categorias.value = ca
+  metodos.value = me
+  perfilId.value = localStorage.getItem('ctd-perfil') ?? ''
+  const perfiles = await listarPerfiles().catch(() => [])
+  const activo = perfiles.find((p) => p.id === perfilId.value)
+    || perfiles.find((p) => p.principal) || perfiles[0]
+  if (activo) perfilId.value = activo.id
   await cargar()
+  api.get('/auth/me').then(({ data }) => { moneda.value = data.moneda ?? 'COP' }).catch(() => {})
 })
+
+// Al recuperar la red se vuelve a pedir todo: lo que se ve en pantalla era la
+// copia local y puede faltarle lo que se registro en otro dispositivo.
+watch(() => offline.conectado, (conectado) => {
+  if (conectado) void recargarCatalogos()
+})
+async function recargarCatalogos() {
+  const [cu, ca, me] = await Promise.all([
+    listarCuentas().catch(() => []),
+    listarCategorias().catch(() => []),
+    listarMetodosPago().catch(() => []),
+  ])
+  cuentas.value = cu.map((c) => ({ id: c.id, nombre: c.nombre }))
+  categorias.value = ca
+  metodos.value = me
+  await cargar()
+}
 watch([filtro, cuentaId, categoriaId, orden], cargar)
 let t: ReturnType<typeof setTimeout>
 watch(q, () => { clearTimeout(t); t = setTimeout(cargar, 350) })

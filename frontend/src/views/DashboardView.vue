@@ -1,6 +1,11 @@
 <template>
   <main class="page rise dashboard">
     <p class="eyebrow">{{ saludo }}, {{ nombre }}</p>
+    <p v-if="datosDeCache || offlineSinCache" class="sub aviso-cache" role="status">
+      <i class="bi bi-wifi-off" aria-hidden="true"></i>
+      <span v-if="datosDeCache">Sin conexión: estas cifras son de tu última conexión. Puedes registrar movimientos y se enviarán al volver la red.</span>
+      <span v-else>Sin conexión: no podemos cargar tus cifras ahora. Puedes seguir registrando movimientos; se enviarán al volver la red.</span>
+    </p>
     <section class="card-featured" style="margin: 12px 0 16px">
       <div class="eyebrow" style="color: #B9C2E0">DISPONIBLE</div>
       <div class="big-number">{{ fmt(disponible) }} <span class="unidad">{{ cod }}</span></div>
@@ -56,6 +61,52 @@
       <div class="grid-2">
         <div><div class="eyebrow">INGRESOS</div><strong>${{ fmt(ingresos) }}</strong></div>
         <div><div class="eyebrow">GASTOS</div><strong>${{ fmt(gastos) }}</strong></div>
+      </div>
+    </section>
+
+    <!-- Agenda diaria de fijos: lo que debía caer y lo ya registrado. -->
+    <section v-if="diasAgenda.length" class="card agenda-card" data-tour="agenda">
+      <div class="agenda-cab">
+        <div>
+          <div class="eyebrow">AGENDA DIARIA</div>
+          <div class="agenda-sub">Fijos que debían caer este mes vs los ya registrados</div>
+        </div>
+        <div class="agenda-total-caja">
+          <strong class="agenda-total">{{ totalFijos }}</strong>
+          <div class="agenda-subt">{{ totalPrevistos }} previstos · {{ totalRegistrados }} registrados</div>
+        </div>
+      </div>
+
+      <div v-if="totalFijos" class="agenda-grid">
+        <div v-for="d in diasConFijos" :key="d.dia" class="agenda-dia">
+          <div class="agenda-dia-num">{{ d.dia }}</div>
+          <div class="agenda-dia-cuerpo">
+            <div class="agenda-detalle">
+              <span v-if="d.fijos_registrados.length" class="badge badge-registrados">
+                {{ d.fijos_registrados.length }} {{ d.fijos_registrados.length === 1 ? 'registrado' : 'registrados' }}
+              </span>
+              <span v-if="d.fijos_previstos.length" class="badge badge-previstos">
+                {{ d.fijos_previstos.length }} {{ d.fijos_previstos.length === 1 ? 'previsto' : 'previstos' }}
+              </span>
+            </div>
+            <ul v-if="d.fijos_registrados.length">
+              <li v-for="f in d.fijos_registrados" :key="f.id" class="agenda-item agenda-item-registrado">
+                <span class="agenda-item-texto">{{ f.nombre }}</span>
+                <span class="agenda-item-monto">{{ f.tipo === 'ingreso' ? '+' : '−' }}{{ fmt(f.monto) }}</span>
+              </li>
+            </ul>
+            <ul v-if="d.fijos_previstos.length">
+              <li v-for="f in d.fijos_previstos" :key="f.id" class="agenda-item agenda-item-previsto">
+                <span class="agenda-item-texto">{{ f.nombre }}</span>
+                <span class="agenda-item-monto">{{ f.tipo === 'ingreso' ? '+' : '−' }}{{ fmt(f.monto) }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="agenda-vacio">
+        Sin fijos próximos este mes.
       </div>
     </section>
 
@@ -200,18 +251,81 @@ type Revision = {
   mensaje: string
 }
 const revision = ref<Revision | null>(null)
+/** Sin red la API no responde y todos los Promise.all caian en null: la pantalla
+ * mostraba $0 como si el usuario no tuviera nada. Se guarda el ultimo resumen
+ * bueno y se marca como tal, en vez de inventar ceros.
+ */
+type ResumenCache = {
+  disponible: number; ingresos: number; gastos: number; balance: number
+  tasa: number | null; moneda: string; guardado: string
+}
+const CLAVE_CACHE = 'ctd-resumen-cache'
+const datosDeCache = ref(false)
+const offlineSinCache = ref(false)
+
+function aplicarCache(): boolean {
+  try {
+    const c = JSON.parse(localStorage.getItem(CLAVE_CACHE) ?? 'null') as ResumenCache | null
+    if (!c) return false
+    disponible.value = c.disponible
+    ingresos.value = c.ingresos
+    gastos.value = c.gastos
+    balance.value = c.balance
+    tasa.value = c.tasa
+    moneda.value = c.moneda || 'COP'
+    datosDeCache.value = true
+    return true
+  } catch { return false }
+}
+
+function guardarCache() {
+  try {
+    localStorage.setItem(CLAVE_CACHE, JSON.stringify({
+      disponible: disponible.value, ingresos: ingresos.value, gastos: gastos.value,
+      balance: balance.value, tasa: tasa.value, moneda: moneda.value,
+      guardado: new Date().toISOString(),
+    }))
+  } catch { /* almacenamiento lleno o bloqueado: la app sigue funcionando */ }
+}
+
 // El backend ya decide el corte segun la preferencia del usuario; aqui solo se
 // usa para las rotulos. El fallback es MENSUAL porque es el default del producto.
 const usaQuincena = computed(() => revision.value?.usa_quincena ?? false)
+/** Agenda diaria: fijos previstos vs registrados por dia */
+const totalPrevistos = ref(0)
+const totalRegistrados = ref(0)
+const totalFijos = computed(() => totalPrevistos.value + totalRegistrados.value)
+type FijoAgenda = {
+  id: string
+  nombre: string
+  tipo: string
+  monto: number
+  etiqueta?: string
+}
+type DiaAgenda = {
+  dia: number
+  fijos_registrados: FijoAgenda[]
+  fijos_previstos: FijoAgenda[]
+}
+const diasAgenda = ref<DiaAgenda[]>([])
+const diasConFijos = computed(() => diasAgenda.value.filter(
+  (d) => d.fijos_previstos.length > 0 || d.fijos_registrados.length > 0,
+))
 
 onMounted(async () => {
-  const [me, cuentas, resumen, met, perfiles, rev] = await Promise.all([
+  // Sin red se evita la ronda de peticiones que van a fallar y se usa la copia.
+  if (!navigator.onLine) {
+    if (!aplicarCache()) offlineSinCache.value = true
+    return
+  }
+  const [me, cuentas, resumen, met, perfiles, rev, cal] = await Promise.all([
     api.get('/auth/me').catch(() => null),
     api.get('/cuentas').catch(() => null),
     api.get('/resumen', { params: { mes } }).catch(() => null),
     api.get('/metas').catch(() => null),
     api.get('/perfiles').catch(() => null),
-    api.get('/asesor/revision').catch(() => null)
+    api.get('/asesor/revision').catch(() => null),
+    api.get('/calendario', { params: { mes } }).catch(() => null)
   ])
   if (me) {
     nombre.value = me.data.nombre?.split(' ')[0] ?? ''
@@ -220,8 +334,27 @@ onMounted(async () => {
   }
   if (cuentas) disponible.value = cuentas.data.reduce((a: number, c: { saldo_actual: number }) => a + Number(c.saldo_actual), 0)
   if (resumen) { ingresos.value = resumen.data.ingresos; gastos.value = resumen.data.gastos; balance.value = resumen.data.balance_mes; tasa.value = resumen.data.tasa_ahorro }
+  // Si no llego nada (red caida a mitad de carga), se muestra lo ultimo bueno.
+  if (!me && !cuentas && !resumen) {
+    if (!aplicarCache()) offlineSinCache.value = true
+  } else {
+    guardarCache()
+  }
   if (met) metas.value = [...met.data.filter((m: { faltante: number }) => m.faltante > 0), ...met.data.filter((m: { faltante: number }) => m.faltante <= 0)].slice(0, 2)
-  if (rev) revision.value = rev.data
+  // Una respuesta parcial (sin quincena) hacia estallar la vista entera al leer
+  // revision.quincena.dias_transcurridos: Inicio se quedaba en blanco. Se exige
+  // la forma minima antes de pintar la tarjeta.
+  if (rev?.data?.quincena && rev.data.movimientos) revision.value = rev.data
+  // PROCESAR DATOS DE LA AGENDA DIARIA
+  if (cal && cal.data) {
+    totalPrevistos.value = cal.data.resumen_fijos.total_previstos || 0
+    totalRegistrados.value = cal.data.resumen_fijos.total_registrados || 0
+    diasAgenda.value = cal.data.dias.map((d: any) => ({
+      dia: d.dia,
+      fijos_registrados: d.fijos_registrados || [],
+      fijos_previstos: d.fijos_previstos || []
+    }))
+  }
   const negocio = (perfiles?.data?.items ?? []).find((p: { tipo: string }) => p.tipo === 'negocio')
   negocioId.value = negocio?.id ?? null
   if (negocio) {
@@ -232,6 +365,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.aviso-cache {
+  display: flex; gap: 7px; align-items: flex-start; margin: 4px 0 0;
+  padding: 9px 11px; border-radius: 12px;
+  background: rgba(216, 154, 39, .10); border-left: 3px solid var(--warning);
+  color: var(--warning-text); font-size: 12.5px; line-height: 1.4;
+}
+.aviso-cache i { flex: none; margin-top: 1px; }
 .aviso-mezcla { border-left: 3px solid var(--warning); background: rgba(216,154,39,.07); }
 .mezcla-top { display: flex; gap: 10px; align-items: flex-start; }
 .mezcla-top i { font-size: 20px; color: var(--warning); margin-top: 2px; }
@@ -278,4 +418,31 @@ onMounted(async () => {
 .aviso-moneda > i { font-size: 20px; color: var(--warning); margin-top: 1px; flex: none; }
 .aviso-moneda p { margin: 4px 0 0; }
 .aviso-moneda .link { padding: 0; font-size: 13px; text-decoration: underline; }
+
+/* --- AGENDA DIARIA --- */
+.agenda-card { margin-top: 16px; border-left: 4px solid var(--mint); }
+.agenda-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.agenda-cab .eyebrow { font-size: 13px; }
+.agenda-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.agenda-total-caja { text-align: right; flex: none; }
+.agenda-total { font-size: 22px; font-weight: 800; color: var(--ink); line-height: 1; }
+.agenda-subt { font-size: 11px; color: var(--ink-soft); margin-top: 4px; white-space: nowrap; }
+.agenda-grid { display: flex; flex-direction: column; gap: 0; }
+.agenda-dia { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); text-align: left; }
+.agenda-dia:first-child { border-top: 0; padding-top: 0; }
+.agenda-dia-num { font-size: 18px; font-weight: 800; color: var(--mint-text); line-height: 1.25; text-align: center; }
+.agenda-dia-cuerpo { min-width: 0; }
+.agenda-detalle { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 700; }
+.badge-registrados { background: var(--mint-tint); color: var(--mint-text); border: 1px solid rgba(34,197,94,.35); }
+.badge-previstos { background: rgba(216,154,39,.14); color: var(--warning-text); border: 1px solid rgba(216,154,39,.35); }
+.agenda-dia ul { list-style: none; margin: 0; padding: 0; }
+.agenda-item { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.agenda-item + .agenda-item { border-top: 1px dashed var(--line); }
+.agenda-item-texto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-item-monto { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; }
+.agenda-item-registrado, .agenda-item-registrado .agenda-item-monto { color: var(--mint-text); }
+.agenda-item-previsto, .agenda-item-previsto .agenda-item-monto { color: var(--warning-text); }
+.agenda-vacio { text-align: center; padding: 18px 8px; color: var(--ink-soft); font-size: 13px; }
+
 </style>

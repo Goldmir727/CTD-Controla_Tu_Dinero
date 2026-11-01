@@ -1,6 +1,10 @@
 <template>
   <main class="page">
     <h2>Nuevo movimiento</h2>
+    <p v-if="!offline.conectado" class="aviso-offline" role="status" aria-live="polite">
+      <i class="bi bi-wifi-off" aria-hidden="true"></i>
+      <span>Sin conexión: este movimiento se guarda en el dispositivo y se envía solo cuando vuelva la red.</span>
+    </p>
     <p v-if="error" id="nm-error" ref="errorBox" class="alert" role="alert" aria-live="assertive">
       {{ error }}
     </p>
@@ -68,8 +72,12 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
-import api from '../services/api'
+import { crearMovimiento, listarCategorias, listarCuentas, listarMetodosPago } from '../services/repository'
+import { useOffline } from '../stores/offline'
+import { useToast } from '../composables/useToast'
 const router = useRouter()
+const offline = useOffline()
+const toast = useToast()
 const route = useRoute()
 const loading = ref(false)
 const error = ref('')
@@ -110,16 +118,26 @@ const categoriasFiltradas = computed(() =>
 )
 const valido = computed(() => form.monto && form.monto > 0 && form.fecha && form.cuenta_id && form.categoria_id)
 
+/**
+ * Los catalogos salen del repositorio, que responde con la copia local cuando no
+ * hay red. Antes se pedian a la API y el catch dejaba el formulario sin cuentas
+ * ni categorias: sin cuenta no se puede guardar, asi que la app se volvia
+ * inusable justo cuando el usuario mas necesitaba registrar un gasto.
+ */
 onMounted(async () => {
-  try {
-    const [cu, ca, me] = await Promise.all([
-      api.get('/cuentas'), api.get('/categorias', { params: { solo_activas: true } }), api.get('/metodos-pago')
-    ])
-    cuentas.value = cu.data
-    categorias.value = ca.data
-    metodos.value = me.data
-    if (cuentas.value[0]) form.cuenta_id = cuentas.value[0].id
-  } catch { mostrarError('No se pudieron cargar cuentas/categorías. Reintenta.') }
+  const [cu, ca, me] = await Promise.all([
+    listarCuentas().catch(() => []),
+    listarCategorias().catch(() => []),
+    listarMetodosPago().catch(() => []),
+  ])
+  cuentas.value = cu
+  categorias.value = ca.filter((c) => (c as { activa?: boolean }).activa !== false)
+  metodos.value = me
+  if (cuentas.value[0] && !form.cuenta_id) form.cuenta_id = cuentas.value[0].id
+  if (!cuentas.value.length) {
+    mostrarError('No hay cuentas en este dispositivo. Conéctate una vez para descargarlas o crea una en Ajustes.')
+  }
+  void offline.refreshPendientes()
 })
 
 function mostrarError(msg: string) {
@@ -139,14 +157,42 @@ function detalle422(e: unknown): string {
 async function guardar() {
   loading.value = true; error.value = ''
   try {
-    const payload = { ...form, categoria_id: form.categoria_id || null, metodo_id: form.metodo_id || null }
-    await api.post('/movimientos', payload, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    await crearMovimiento({
+      tipo: form.tipo === 'ingreso' ? 'ingreso' : 'gasto',
+      monto: form.monto ?? 0,
+      descripcion: form.descripcion,
+      fecha: form.fecha,
+      cuenta_id: form.cuenta_id,
+      categoria_id: form.categoria_id || null,
+      metodo_id: form.metodo_id || null,
+    })
+    await offline.refreshPendientes()
+    if (!offline.conectado) {
+      toast.mostrar('Guardado sin conexión. Se envía al volver la red.')
+    }
     router.push('/inicio')
-  } catch (e: unknown) { mostrarError(detalle422(e)) }
+  } catch (e: unknown) {
+    // Si fallo la red pero quedo en la cola, no es un error para el usuario:
+    // el movimiento esta guardado y se enviara solo.
+    await offline.refreshPendientes()
+    if (offline.hayPendientes) {
+      toast.mostrar('Guardado sin conexión. Se envía al volver la red.')
+      router.push('/inicio')
+      return
+    }
+    mostrarError(detalle422(e))
+  }
   finally { loading.value = false }
 }
 </script>
 <style scoped>
+.aviso-offline {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 12px;
+  background: rgba(216, 154, 39, .10); border-left: 3px solid var(--warning);
+  color: var(--warning-text); font-size: 12.5px; line-height: 1.4;
+}
+.aviso-offline i { flex: none; margin-top: 1px; }
 /* Mismo control en dos toques que en Movs y Plan, en vez de un desplegable con
    dos opciones que ademas salia con el valor equivocado. */
 .tipo-switch { display: flex; gap: 8px; }

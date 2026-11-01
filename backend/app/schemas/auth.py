@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, BeforeValidator, EmailStr, Field
@@ -27,6 +28,10 @@ class RegistroIn(BaseModel):
 class LoginIn(BaseModel):
     correo: CorreoLimpio
     password: str
+    # Identificador del dispositivo (UUID generado por el cliente, persistido en
+    # localStorage). Permite rastrear en que dispositivos esta abierta la sesion.
+    device_id: str | None = Field(default=None, min_length=1, max_length=64)
+    device_name: str | None = Field(default=None, min_length=1, max_length=120)
 
 
 class TokenOut(BaseModel):
@@ -60,6 +65,7 @@ class LoginOut(BaseModel):
     refresh_token: str = ""
     token_type: str = "Bearer"
     expires_in: int = 1800
+    device_id: str | None = None
 
 
 class TwoFaSolicitarIn(BaseModel):
@@ -159,3 +165,16 @@ def user_out(user, aviso: str | None = None) -> UserOut:
 class ConsentimientoIn(BaseModel):
     acepta_terminos: bool = False
     acepta_datos: bool = False
+
+
+class SesionOut(BaseModel):
+    id: str
+    device_id: str
+    device_name: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    is_active: bool
+    last_active_at: datetime | None = None
+    created_at: datetime | None = None
+    expires_at: datetime | None = None
+    es_actual: bool = False

@@ -3,26 +3,34 @@
 Qué hace la app y cómo se usa. Si estás leyendo esto, probablemente quieres
 registrar tus gastos y entender qué te dice la app.
 
+> Esta guía es para leer. La ayuda **dentro** de la app es el recorrido guiado:
+> aparece la primera vez que entras y puedes volver a abrirlo con el botón **?**
+> de la cabecera, que además abre el paso que explica la pantalla donde estás.
+
 ---
 
 ## 1. La idea
 
-CTD registra lo que gastas **hablándole** y te avisa, por quincenas, si te
+CTD registra lo que entra y lo que sale, y te avisa **por quincenas** si te
 alcanza.
 
 No es un contador de gastos: es el que te avisa **antes** de quedarte sin plata.
 
 ---
 
-## 2. Las cinco pantallas
+## 2. Las seis pantallas
 
 | Pestaña | Para qué sirve |
 |---|---|
-| **Inicio** | Lo esencial: cuánto tienes y cómo vas esta quincena |
+| **Inicio** | Lo esencial: cuánto tienes y cómo vas esta quincena o este mes |
 | **Movs** | Todo lo registrado, editable — y los **fijos** (ingresos y gastos que se repiten), en la pestaña Fijos |
+| **Agenda** | El calendario: qué se registró cada día y qué fijos vienen |
 | **Plan** | Presupuestos y metas |
 | **Datos** | Tendencias y comparaciones mes a mes |
 | **Asesor** | Preguntas en español sobre **tus** números |
+
+El botón redondo **+** (o **+ Nuevo movimiento** en escritorio) está siempre a
+mano: abre el registro desde cualquier pantalla, también desde Inicio.
 
 ---
 
@@ -37,9 +45,16 @@ entenderlas. Está explicado en la pantalla `/datos`.
 El audio de las notas de voz **se borra después de transcribirlo**; solo queda el
 texto.
 
-### Registra un gasto
+### Registrar: dictando o a mano
 
-Escribe una frase normal, como si le hablaras a un amigo:
+El botón de registrar abre dos caminos:
+
+| Camino | Cuándo usarlo | Necesita internet |
+|---|---|---|
+| **Dictar o escribir** una frase | Lo de todos los días: "gasté 25 mil en un almuerzo" | Sí |
+| **+ Ingreso / − Gasto** (formulario) | Cuando no quieres dictar, o no tienes señal | No |
+
+Frases que entiende el primer camino:
 
 ```
 gasté 25 mil en un almuerzo con los amigos
@@ -50,17 +65,48 @@ me llego el salario de 2.500.000
 **Siempre revisa antes de guardar.** La app te muestra lo que entendió y tú
 confirmas. Si el monto no estaba en tu texto, te lo pide a mano.
 
-### También puedes hablarlo
+El formulario manual pide monto, cuenta y categoría. La cuenta es obligatoria:
+el saldo de todas tus cuentas depende de ella.
 
-El botón redondo abre la captura por voz. Dicta "gasté 25 mil en el almuerzo" y
-sale lo mismo. **Úsalo con calma**: si hablas muy rápido es más probable que
-entienda mal los números.
+### Si ya tienes el gasto en la cabeza y no en la frase
+
+No pasa nada: abre el formulario manual y anótalo en dos toques. Es el mismo
+registro que el dictado, solo que sin pasar por el intérprete.
 
 ---
 
-## 4. Los dos conceptos que importan
+## 4. Si te quedas sin internet
 
-### Available y "cierra en"
+La app está pensada para usarse en la calle, donde la señal se va.
+
+**Funciona sin conexión:**
+
+- Registrar movimientos (ingreso o gasto) con el formulario manual.
+- Registrar y editar fijos.
+- Ver y corregir lo que ya registraste, y los saldos de tus cuentas.
+- Elegir cuenta, categoría y método: se usan las copias guardadas en el
+  teléfono de la última vez que hubo red.
+
+**No funciona sin conexión:**
+
+- Dictar o escribir una frase (lo interpreta el servidor).
+- Agenda, Datos (análisis y tendencias), Asesor y el informe en PDF.
+
+**Qué te dice la app:** arriba aparece un aviso **"Sin conexión"** que explica
+esto mismo. Todo lo que registres se guarda en el dispositivo y se **envía solo**
+cuando vuelve la red. Mientras tanto verás cuántos cambios faltan por enviar, y
+un botón para reintentar si alguno se queda atascado.
+
+Tu sesión **no se cierra** al quedarte sin red: sigues dentro de tu cuenta.
+
+> Consejo: abre la app una vez con internet antes de salir (Inicio o Movs basta).
+> Eso deja descargadas tus cuentas y categorías para poder registrar sin señal.
+
+---
+
+## 5. Los dos conceptos que importan
+
+### Disponible y "cierra en"
 
 **Disponible** es tu saldo real hoy: la suma de todas tus cuentas menos lo que
 deben.
@@ -92,7 +138,7 @@ convierte entre monedas, cambia cómo se muestra.
 
 ---
 
-## 5. Plan y Fijos: lo que puedes declarar
+## 6. Plan y Fijos: lo que puedes declarar
 
 **Presupuestos** — un tope por categoría y mes. La app avisa cuando vas más
 rápido de lo que el calendario permite, no solo cuando te pasaste.
@@ -112,7 +158,7 @@ app no adivina.
 
 ---
 
-## 6. Si te equivocaste
+## 7. Si te equivocaste
 
 Toca el movimiento en **Movs** y lo editas. Corregir es normal y rápido: es
 mejor que borrarlo y volver a escribirlo.
@@ -121,7 +167,7 @@ También puedes eliminarlo.
 
 ---
 
-## 7. Tus datos son tuyos
+## 8. Tus datos son tuyos
 
 **Ajustes → Respaldo y exportación**:
 
@@ -136,7 +182,7 @@ que puedes usarlo como tu copia de seguridad.
 
 ---
 
-## 8. El asesor
+## 9. El asesor
 
 Pregunta en español normal sobre tus propios números:
 
@@ -153,7 +199,7 @@ te lo dice.
 
 ---
 
-## 9. Seguridad
+## 10. Seguridad
 
 - Activa **2FA** en Ajustes: te llega un código por correo.
 - Exporta tu Excel de vez en cuando. Tus datos están en la nube.
@@ -161,10 +207,11 @@ te lo dice.
 
 ---
 
-## 10. Instalarla en el teléfono
+## 11. Instalarla en el teléfono
 
 Abre la app en el navegador del celular y usa **"Instalar app"**. Se comporta
-como una app normal, con icono propio y **funciona sin conexión** para lo que ya
-tenías cargado.
+como una app normal, con icono propio, y **abre sin conexión**: la pantalla y
+tus datos se cargan del teléfono. Lo que registres sin red se envía al volver la
+señal (ver sección 4).
 
 Cuando haya versión nueva aparece una cinta para actualizar.

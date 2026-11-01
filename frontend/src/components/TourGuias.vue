@@ -13,7 +13,10 @@
 import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { indiceParaRuta, pasosPara, type ContextoPais, type Paso } from '../tour/pasos'
 
-const CLAVE = 'ctd-tour-v4'
+// v5: el recorrido ahora explica el registro manual y qué pasa sin internet, y
+// suma la pestaña Agenda. Se sube la clave para que quien ya vio el recorrido
+// viejo vea una vez el nuevo: la ayuda desactualizada es peor que ninguna.
+const CLAVE = 'ctd-tour-v5'
 const abierto = ref(false)
 const indice = ref(0)
 const caja = ref<{ top: number; left: number; width: number; height: number } | null>(null)

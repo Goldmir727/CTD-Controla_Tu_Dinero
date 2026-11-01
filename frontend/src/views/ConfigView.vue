@@ -252,6 +252,43 @@
       <p v-if="err.wa" class="alert" role="alert" aria-live="assertive">{{ err.wa }}</p>
     </div>
 
+    <div class="eyebrow">DISPOSITIVOS CON SESIÓN ACTIVA</div>
+    <button class="item" @click="toggle('dispositivos')"><span>Ver y administrar dispositivos<small>{{ sesiones.length }} sesión{{ sesiones.length !== 1 ? 'es' : '' }} activa{{ sesiones.length !== 1 ? 's' : '' }}</small></span><span>›</span></button>
+    <div v-if="open === 'dispositivos'" class="panel">
+      <p class="sub" style="margin: 0; flex-basis: 100%">
+        Cada dispositivo donde iniciaste sesión aparece aquí. Toca "Cerrar" en
+        cualquiera que no reconozcas: su sesión se desactiva inmediatamente y
+        deberá iniciar sesión de nuevo.
+      </p>
+      <div v-if="sesiones.length === 0" class="sub" style="flex-basis: 100%; text-align: center; padding: 20px 0">
+        No hay sesiones registradas todavía.
+      </div>
+      <div v-for="s in sesiones" :key="s.id" class="line">
+        <div style="min-width: 0">
+          <span>{{ s.device_name || 'Dispositivo sin nombre' }}</span>
+          <div class="sub">
+            {{ s.ip_address ? 'IP: ' + s.ip_address + '  ·  ' : '' }}
+            {{ s.user_agent ? 'Navegador: ' + s.user_agent.slice(0, 60) : '' }}
+          </div>
+          <div class="sub" style="margin-top: 2px">
+            {{ s.es_actual ? '● Este dispositivo' : '○ Otro dispositivo' }} ·
+            Última actividad: {{ s.last_active_at ? new Date(s.last_active_at).toLocaleString() : '—' }} ·
+            Creada: {{ s.created_at ? new Date(s.created_at).toLocaleDateString() : '—' }}
+          </div>
+        </div>
+        <span>
+          <span v-if="s.is_active" class="sub" style="color: var(--mint-text)">Activa</span>
+          <span v-else class="sub" style="color: var(--danger-text)">Revocada</span>
+          <span v-if="s.is_active && !s.es_actual" style="margin-left: 8px">
+            <button class="btn-ghost" :disabled="busy.sesiones" @click="revocarSesion(s.id)">
+              {{ busy.sesiones ? '…' : 'Cerrar' }}
+            </button>
+          </span>
+        </span>
+      </div>
+      <p v-if="err.sesiones" class="alert" role="alert" aria-live="assertive">{{ err.sesiones }}</p>
+    </div>
+
     <div class="eyebrow">ZONA DE PELIGRO</div>
     <div class="item" style="cursor: default">
       <span>Empezar desde cero<br /><small>Borra movimientos, presupuestos, metas y cuentas. Tu sesión se conserva.</small></span>
@@ -305,7 +342,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import NumeroInput from '../components/NumeroInput.vue'
 import api from '../services/api'
@@ -327,6 +364,7 @@ const cuentas = ref<{ id: string; nombre: string; tipo: string; saldo_actual: nu
 const cats = ref<{ id: string; nombre: string; tipo: string; activa: boolean }[]>([])
 const metodos = ref<{ id: string; nombre: string }[]>([])
 const twofa = ref(false)
+const sesiones = ref<{ id: string; device_id: string; device_name: string | null; ip_address: string | null; user_agent: string | null; is_active: boolean; last_active_at: string | null; created_at: string | null; expires_at: string | null; es_actual: boolean }[]>([])
 const armado = ref(false)
 const open = ref('')
 const version = __APP_VERSION__
@@ -374,9 +412,9 @@ const div = reactive({ origen: '', nombre: '', monto: null as number | null })
 const ncat = reactive({ nombre: '', tipo: 'gasto' })
 const nmet = ref('')
 const impModo = ref('agregar')
-const busy = reactive({ perfil: false, moneda: false, periodo: false, wa: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false })
-const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '', periodo: '', wa: '' })
-const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', periodo: '', wa: '', twofa: '', reset: '' })
+const busy = reactive({ perfil: false, moneda: false, periodo: false, wa: false, correo: false, pw: false, cuentas: false, cats: false, metodos: false, respaldo: false, excel: false, pdf: false, twofa: false, logout: false, update: false, reset: false, pwa: false, sesiones: false })
+const msg = reactive({ perfil: '', correo: '', pw: '', cuentas: '', respaldo: '', excel: '', moneda: '', periodo: '', wa: '', sesiones: '' })
+const err = reactive({ foto: '', correo: '', pw: '', cuentas: '', cats: '', metodos: '', respaldo: '', excel: '', moneda: '', periodo: '', wa: '', twofa: '', reset: '', sesiones: '' })
 // El boton se deshabilita si no eres PRO, pero el usuario tiene que poder LEER
 // por que esta bloqueado: un boton muerto sin explicacion parece un error.
 const esPro = ref(false)
@@ -697,6 +735,28 @@ async function desactivar2fa() {
   try { await api.post('/auth/2fa/desactivar'); twofa.value = false }
   finally { busy.twofa = false }
 }
+async function listarSesiones() {
+  busy.sesiones = true; err.sesiones = ''
+  try {
+    const { data } = await api.get('/auth/sesiones')
+    sesiones.value = data
+  } catch (e: any) {
+    err.sesiones = e?.response?.data?.detail ?? 'No se pudieron cargar los dispositivos.'
+  } finally { busy.sesiones = false }
+}
+
+async function revocarSesion(id: string) {
+  if (!(await confirmar({ titulo: '¿Revocar esta sesión?', mensaje: 'El dispositivo tendrá que iniciar sesión de nuevo para seguir usando la app.', ok: 'Revocar', peligro: true }))) return
+  busy.sesiones = true; err.sesiones = ''
+  try {
+    await api.delete(`/auth/sesiones/${id}`)
+    sesiones.value = sesiones.value.filter((s) => s.id !== id)
+    toast.mostrar('Sesión revocada')
+  } catch (e: any) {
+    err.sesiones = e?.response?.data?.detail ?? 'No se pudo revocar la sesión.'
+  } finally { busy.sesiones = false }
+}
+
 async function logout() { busy.logout = true; await auth.logout(); router.push('/') }
 async function reiniciar() {
   busy.reset = true; err.reset = ''
@@ -722,6 +782,7 @@ onMounted(async () => {
   api.get('/auth/paises').then(({ data }) => { catalogoPaises.value = data.items }).catch(() => {})
   await recargar()
 })
+watch(open, (val) => { if (val === 'dispositivos') void listarSesiones() })
 </script>
 
 <style>

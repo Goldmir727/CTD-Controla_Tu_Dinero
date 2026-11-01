@@ -15,6 +15,10 @@
  *     salir solo.
  *  2. Se puede volver a ver cuando se le olvide algo.
  *
+ * Hay un paso dedicado a quedarse sin internet. No es un detalle tecnico: es la
+ * duda que mas frena a alguien que registra en la calle, y si no se explica ahi
+ * el usuario cierra la app pensando que perdio el gasto.
+ *
  * El texto del paso de la quincena depende del pais: en Colombia y Mexico se
  * cobra dos veces al mes y el concepto existe; en Estados Unidos no, y ahi el
  * mismo texto seria mentira.
@@ -59,24 +63,39 @@ export function pasosPara(pais: ContextoPais): Paso[] {
     {
       titulo: 'Esto es lo que puedes hacer',
       texto:
-        'Registrar un gasto hablando, ver si te alcanza antes de quedarte sin ' +
-        'plata, controlar presupuestos y metas, y preguntarle al asesor sobre tus ' +
-        'números. Te lo mostramos en cuarenta segundos. Puedes saltarlo cuando quieras.',
+        'Registrar lo que entra y lo que sale, ver si te alcanza antes de ' +
+        'quedarte sin plata, controlar presupuestos y metas, y preguntarle al ' +
+        'asesor sobre tus números. Te lo mostramos en menos de un minuto. ' +
+        'Puedes saltarlo cuando quieras y volver a verlo después.',
     },
     /*
  * `[data-tour="captura"]` esta en el boton flotante (movil) y en la pastilla
- * Capturar (escritorio, donde no hay flotante): los dos llevan a la captura por
- * voz. El texto no nombra el control a proposito, porque cambia segun el ancho
- * de pantalla y nombrar uno solo seria mentira en el otro.
+ * Capturar (escritorio, donde no hay flotante): los dos abren el panel de
+ * registro. El texto no nombra el control a proposito, porque cambia segun el
+ * ancho de pantalla y nombrar uno solo seria mentira en el otro.
+ *
+ * Se explican los DOS caminos: dictar y anotar a mano. Antes solo se hablaba de
+ * la voz, y quien no podia o no queria dictar no sabia que el formulario manual
+ * estaba detras del mismo boton.
  */
 {
       selector: '[data-tour="captura"]',
-      titulo: 'Registra lo que gastaste, hablándolo',
+      titulo: 'Registrar en dos toques',
       texto:
-        'Escribe "gasté 25 mil en un almuerzo", o dictalo con el micrófono. La app ' +
-        'te muestra lo que entendió y tú confirmas antes de que se guarde nada. ' +
-        'También sirve para ingresos y para pagos que se repiten.',
-      ruta: '/movimientos',
+        'El botón de registrar abre dos caminos: dictarlo o escribirlo ("gasté 25 ' +
+        'mil en un almuerzo"), o anotarlo a mano con + Ingreso / − Gasto. Los dos ' +
+        'guardan en el mismo lugar, y siempre ves lo que se va a guardar antes de ' +
+        'confirmar.',
+      ruta: '*',
+    },
+    {
+      titulo: 'Si te quedas sin internet',
+      texto:
+        'La app no deja de funcionar: puedes registrar movimientos y fijos, y ' +
+        'editarlos, sin señal. Se guardan en este dispositivo y se envían solos ' +
+        'cuando vuelve la red. Arriba verás un aviso con cuántos cambios faltan ' +
+        'por enviar. Lo que sí necesita internet: dictar por voz, Agenda, Datos, ' +
+        'Asesor y el informe en PDF.',
     },
     {
       selector: '[data-tour="quincena"]',
@@ -95,11 +114,12 @@ export function pasosPara(pais: ContextoPais): Paso[] {
     },
     {
       selector: '[data-tour="nav"]',
-      titulo: 'Cinco pantallas, cinco oficios',
+      titulo: 'Seis pantallas, seis oficios',
       texto:
-        'Inicio para lo esencial, Movs para corregir lo que registraste y fijar lo ' +
-        'que se repite (pestaña Fijos), Plan para presupuestos y metas, Datos para ' +
-        'ver tendencias, y Asesor para preguntar.',
+        'Inicio para lo esencial, Movs para corregir lo que registraste y declarar ' +
+        'lo que se repite (pestaña Fijos), Agenda para ver el mes y lo que viene, ' +
+        'Plan para presupuestos y metas, Datos para ver tendencias, y Asesor para ' +
+        'preguntar con tus propias cifras.',
       lado: 'abajo',
       ruta: '*',
     },
@@ -126,8 +146,9 @@ export function pasosPara(pais: ContextoPais): Paso[] {
     {
       titulo: 'Listo. Ya sabes lo básico',
       texto:
-        'Puedes volver a ver esto cuando quieras con el botón ? de la cabecera, o ' +
-        'desde Ajustes, en "Recorrido guiado".',
+        'Puedes volver a ver esto cuando quieras con el botón ? de la cabecera, ' +
+        'que abre el paso que explica la pantalla donde estás, o desde Ajustes, en ' +
+        '"Recorrido guiado". Si algo te confunde, ese botón es la ayuda más rápida.',
     },
   ]
 }

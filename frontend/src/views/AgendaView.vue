@@ -13,6 +13,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { dinero, firmado, mesEs, numero, locale } from '../utils/formato'
+import { useOffline } from '../stores/offline'
 
 type Mov = {
   id: string
@@ -53,6 +54,7 @@ const cargando = ref(false)
 const error = ref('')
 const seleccion = ref<number>(hoy.getDate())
 const moneda = ref('COP')
+const offline = useOffline()
 
 const dias = computed(() => datos.value?.dias ?? [])
 const inicio = computed(() => datos.value?.inicio_semana ?? 0)
@@ -82,6 +84,11 @@ function fechaLarga(dia: number) {
 }
 
 async function cargar() {
+  if (!offline.conectado) {
+    error.value = 'Sin internet: Agenda necesita conexión para cargar el calendario. Los movimientos registrados se guardan en el dispositivo y se sincronizan al recuperar la red.'
+    cargando.value = false
+    return
+  }
   cargando.value = true
   error.value = ''
   try {
@@ -139,7 +146,7 @@ function registrar(dia: number) {
   router.push({ path: '/movimientos/nuevo', query: { fecha: `${mes.value}-${String(dia).padStart(2, '0')}` } })
 }
 
-watch(mes, cargar)
+watch([mes, offline.conectado], () => cargar)
 onMounted(async () => {
   try {
     const { data } = await api.get('/auth/me')

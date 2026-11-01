@@ -15,6 +15,7 @@ from app.api.v1 import (
     recurrentes,
     reportes,
     resumen,
+    sesiones,
     whatsapp,
 )
 
@@ -22,5 +23,5 @@ api_router = APIRouter()
 for r in (auth.router, perfiles.router, cuentas.router, movimientos.router, plan.router,
           resumen.router, catalogos.router, asesor.router, recurrentes.router,
           calendario.router, reportes.router, captura.router, documentos.router,
-          billing.router, whatsapp.router):
+          billing.router, whatsapp.router, sesiones.router):
     api_router.include_router(r)

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import field_validator, model_validator
@@ -142,7 +143,12 @@ class Settings(BaseSettings):
         return self
 
     # pydantic-settings v2: `class Config` esta deprecado, se usa model_config.
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Busca el .env en la raiz del proyecto (un nivel arriba de backend/).
+    model_config = SettingsConfigDict(
+        env_file=str(Path(__file__).resolve().parents[3] / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

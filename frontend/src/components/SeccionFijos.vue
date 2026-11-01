@@ -116,10 +116,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import NumeroInput from './NumeroInput.vue'
-import api from '../services/api'
+import { crearRecurrente, editarRecurrente, eliminarRecurrente, listarCategorias, listarCuentas, listarRecurrentes, toggleRecurrente } from '../services/repository'
 import { numero } from '../utils/formato'
 import { confirmar } from '../composables/useConfirm'
 import { useToast } from '../composables/useToast'
+import type { Recurrente } from '../services/repository'
 
 /** Ingresos y gastos fijos, con su frecuencia. Vive en Movimientos (desde Plan)
  *  porque un fijo se declara y se pasa a revisar como lo demas que entra y sale. */
@@ -203,20 +204,19 @@ function cuando(f: Fijo) {
 async function guardarFijo() {
   error.value = ''
   const cuerpo = {
-    nombre: nf.nombre.trim(), tipo: nf.tipo, monto: nf.monto,
-    dia: Math.max(1, Math.min(31, nf.dia || 1)), frecuencia: nf.frecuencia,
+    nombre: nf.nombre.trim(), tipo: nf.tipo, monto: nf.monto ?? 0,
+    dia: Math.max(1, Math.min(31, nf.dia || 1)), frecuencia: nf.frecuencia as 'mensual' | 'quincenal' | 'semanal',
     dia_semana: nf.frecuencia === 'semanal' ? nf.dia_semana : null,
-    categoria_id: nf.categoria_id || null, cuenta_id: nf.cuenta_id || null
+    categoria_id: nf.categoria_id || null, cuenta_id: nf.cuenta_id || null,
+    confirmado: true, activo: true, nota: null
   }
   try {
-    if (editando.value) await api.patch(`/recurrentes/${editando.value}`, cuerpo)
-    else await api.post('/recurrentes', cuerpo)
+    if (editando.value) await editarRecurrente(editando.value, cuerpo)
+    else await crearRecurrente(cuerpo)
     alternarForm()
     await cargar()
   } catch (e: any) {
-    // El backend responde cosas utiles ("La categoría 'Comida' no aplica a
-    // ingresos"); se muestran tal cual en vez de un "no se pudo" genérico.
-    error.value = e?.response?.data?.detail ?? 'No se pudo guardar el fijo.'
+    error.value = e?.message ?? 'No se pudo guardar el fijo.'
   }
 }
 function editarFijo(f: Fijo) {
@@ -246,23 +246,30 @@ function cerrarFormFijo() {
   })
 }
 async function toggleFijo(f: Fijo) {
-  await api.patch(`/recurrentes/${f.id}/toggle`); await cargar()
+  await toggleRecurrente(f.id); await cargar()
 }
 async function eliminarFijo(id: string) {
   if (!(await confirmar({ titulo: '¿Eliminar este fijo?', mensaje: 'Dejará de contar en tus fijos de cada mes.', ok: 'Eliminar', peligro: true }))) return
-  await api.delete(`/recurrentes/${id}`); await cargar(); toast.mostrar('Fijo eliminado')
+  await eliminarRecurrente(id); await cargar(); toast.mostrar('Fijo eliminado')
 }
 async function cargar() {
   error.value = ''
+  // Las cuentas salen de /cuentas, no de la lista de perfiles: elegir "Personal"
+  // guardaba el id de un perfil como cuenta del fijo.
   const [c, r, cu] = await Promise.all([
-    api.get('/categorias', { params: { solo_activas: false } }),
-    api.get('/recurrentes').catch(() => ({ data: { items: [], resumen: null } })),
-    api.get('/cuentas').catch(() => ({ data: [] }))
+    listarCategorias(),
+    listarRecurrentes().catch(() => ({ items: [] as Recurrente[], resumen: null })),
+    listarCuentas().catch(() => [])
   ])
-  cats.value = c.data
-  fijos.value = r.data.items ?? []
-  resumenFijos.value = r.data.resumen ?? null
-  cuentas.value = cu.data
+  cats.value = c
+  fijos.value = r.items.map((r): Fijo => ({
+    id: r.id, nombre: r.nombre, tipo: r.tipo, monto: r.monto, monto_mes: r.monto_mes ?? r.monto,
+    dia: r.dia, dia_semana: r.dia_semana, etiqueta: r.etiqueta, proxima: r.proxima,
+    frecuencia: r.frecuencia, activo: r.activo, cuenta_id: r.cuenta_id,
+    categoria_id: r.categoria_id, categoria: r.categoria
+  }))
+  resumenFijos.value = r.resumen
+  cuentas.value = cu
 }
 onMounted(cargar)
 </script>
