@@ -7,10 +7,26 @@ from fastapi import HTTPException, Request
 _hits: dict[str, list[float]] = defaultdict(list)
 
 
+def ip_cliente(request: Request) -> str:
+    """IP real del usuario detras de un proxy (Caddy en local, Vercel en prod).
+
+    Sin esto, en Vercel `request.client.host` es la IP interna del proxy: todos
+    los usuarios compartirian la misma clave y el limite de login (10/min) se
+    agotaria entre todos. Se toma el primer valor de X-Forwarded-For, que es el
+    que agrega el proxy con la IP del cliente.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip() or "?"
+    return request.headers.get("x-real-ip") or (
+        request.client.host if request.client else "?"
+    )
+
+
 def _limit(key: str, max_n: int, window_s: int):
     async def dep(request: Request):
         now = time.monotonic()
-        host = request.client.host if request.client else "?"
+        host = ip_cliente(request)
         k = f"{key}:{host}"
         arr = [t for t in _hits[k] if now - t < window_s]
         if len(arr) >= max_n:

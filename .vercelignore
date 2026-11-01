@@ -1,0 +1,30 @@
+# Secretos y archivos locales: nunca suben al build de Vercel.
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+certs/
+
+# Dependencias y builds locales: Vercel instala y compila desde cero.
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+backend/.pytest_cache/
+**/__pycache__/
+*.py[cod]
+
+# Herramientas y adjuntos que no forman parte de la app.
+.freebuff/
+.cloud-attachments/
+.github/
+.git/
+
+# Tests: no se necesitan en el runtime y agrandan el bundle de la funcion.
+backend/app/tests/
+
+# Documentacion de desarrollo (si se quiere publicar, mover a frontend/public/).
+docs/
+TUTORIAL.md
+WHATSAPP.md
