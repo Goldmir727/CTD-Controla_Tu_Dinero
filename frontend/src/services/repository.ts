@@ -499,34 +499,36 @@ export async function toggleRecurrente(id: string): Promise<void> {
 export type CategoriaLocal = { id: string; nombre: string; tipo: string; activa?: boolean }
 
 export async function listarCategorias(): Promise<CategoriaLocal[]> {
+  const perfil = perfilActivo()
   if (!online) {
-    return obtenerCategoriasLocales()
+    return obtenerCategoriasLocales(perfil || undefined)
   }
   try {
     const { data } = await api.get<CategoriaLocal[]>('/categorias', { params: { solo_activas: false } })
-    for (const c of data) await guardarCategoriaLocal({ id: c.id, nombre: c.nombre, tipo: c.tipo })
+    for (const c of data) await guardarCategoriaLocal({ id: c.id, nombre: c.nombre, tipo: c.tipo, perfil_id: perfil || undefined })
     return data
   } catch {
-    return obtenerCategoriasLocales()
+    return obtenerCategoriasLocales(perfil || undefined)
   }
 }
 
-export type Cuenta = { id: string; nombre: string; tipo?: string; saldo_actual?: number }
+export type Cuenta = { id: string; nombre: string; tipo?: string; saldo_actual?: number; perfil_id?: string }
 
 /** La cuenta es obligatoria al registrar: sin esta copia local el formulario
  *  queda sin opciones apenas se corta la red. */
 export async function listarCuentas(): Promise<Cuenta[]> {
+  const perfil = perfilActivo()
   if (!online) {
-    return obtenerCuentasLocales()
+    return obtenerCuentasLocales(perfil || undefined)
   }
   try {
     const { data } = await api.get<Cuenta[]>('/cuentas')
     await reemplazarCuentasLocales(
-      data.map((c) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, saldo_actual: c.saldo_actual })),
+      data.map((c) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, saldo_actual: c.saldo_actual, perfil_id: perfil || undefined })),
     )
     return data
   } catch {
-    return obtenerCuentasLocales()
+    return obtenerCuentasLocales(perfil || undefined)
   }
 }
 

@@ -53,6 +53,7 @@ type CuentaLocal = {
   nombre: string
   tipo?: string
   saldo_actual?: number
+  perfil_id?: string
 }
 
 type MetodoLocal = {
@@ -80,7 +81,7 @@ interface CTDDB extends DBSchema {
   }
   categorias: {
     key: string
-    value: { id: string; nombre: string; tipo: string }
+    value: { id: string; nombre: string; tipo: string; perfil_id?: string }
     indexes: { 'by-tipo': string }
   }
   cuentas: {
@@ -214,14 +215,16 @@ export async function obtenerPerfilesLocales(): Promise<PerfilLocal[]> {
 
 /** Categoría local */
 
-export async function guardarCategoriaLocal(c: { id: string; nombre: string; tipo: string }): Promise<void> {
+export async function guardarCategoriaLocal(c: { id: string; nombre: string; tipo: string; perfil_id?: string }): Promise<void> {
   const db = await getDB()
   await db.put('categorias', c)
 }
 
-export async function obtenerCategoriasLocales(): Promise<{ id: string; nombre: string; tipo: string }[]> {
+export async function obtenerCategoriasLocales(perfilId?: string): Promise<{ id: string; nombre: string; tipo: string; perfil_id?: string }[]> {
   const db = await getDB()
-  return db.getAll('categorias')
+  const all = await db.getAll('categorias')
+  if (!perfilId) return all
+  return all.filter((c) => !c.perfil_id || c.perfil_id === perfilId)
 }
 
 export async function eliminarCategoriaLocal(id: string): Promise<void> {
@@ -234,14 +237,20 @@ export async function eliminarCategoriaLocal(id: string): Promise<void> {
 export async function reemplazarCuentasLocales(cuentas: CuentaLocal[]): Promise<void> {
   const db = await getDB()
   const tx = db.transaction('cuentas', 'readwrite')
-  await tx.store.clear()
+  const perfilId = cuentas.length ? cuentas[0].perfil_id : undefined
+  const existentes = await tx.store.getAll()
+  for (const c of existentes) {
+    if (!perfilId || c.perfil_id === perfilId) await tx.store.delete(c.id)
+  }
   for (const c of cuentas) await tx.store.put(c)
   await tx.done
 }
 
-export async function obtenerCuentasLocales(): Promise<CuentaLocal[]> {
+export async function obtenerCuentasLocales(perfilId?: string): Promise<CuentaLocal[]> {
   const db = await getDB()
-  return db.getAll('cuentas')
+  const all = await db.getAll('cuentas')
+  if (!perfilId) return all
+  return all.filter((c) => !c.perfil_id || c.perfil_id === perfilId)
 }
 
 export async function reemplazarMetodosLocales(metodos: MetodoLocal[]): Promise<void> {
