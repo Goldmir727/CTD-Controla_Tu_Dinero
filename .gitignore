@@ -2,8 +2,19 @@
 certs/
 # Secretos y env local
 .env
+.env.local
+.env.*.local
+frontend/.env
 frontend/.env.local
 # Build / deps
 frontend/dist/
 frontend/node_modules/
-backend/__pycache__/
+backend/.venv/
+# Python: bytecode y cachés de herramientas (antes solo se ignoraba
+# backend/__pycache__, así que los .pyc de subcarpetas se colaban al repo).
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+# Adjuntos y metadatos de herramientas locales
+.cloud-attachments/
+.freebuff/
