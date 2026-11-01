@@ -146,7 +146,7 @@ function registrar(dia: number) {
   router.push({ path: '/movimientos/nuevo', query: { fecha: `${mes.value}-${String(dia).padStart(2, '0')}` } })
 }
 
-watch([mes, offline.conectado], () => cargar)
+watch([mes, offline.conectado], () => { void cargar() })
 onMounted(async () => {
   try {
     const { data } = await api.get('/auth/me')
