@@ -54,9 +54,9 @@
     entró menos lo que salió. Arrancar por la estimación invita a leer
     "+8.167.200" como plata que uno tiene, y no la tiene.
 -->
-<section class="card-featured card-balance">
+<section class="card card-balance">
       <div class="eyebrow">BALANCE DE {{ mesLabel }}</div>
-      <div class="big-number" style="font-size: 32px">{{ balance >= 0 ? '+' : '−' }}${{ fmt(Math.abs(balance)) }}</div>
+      <div class="big-number" style="font-size: 32px">{{ balance >= 0 ? '+' : '−' }}${{ fmt(Math.abs(balance)) }} · {{ balancePct }}% disponible</div>
       <hr class="divider" />
       <div class="grid-2">
         <div><div class="eyebrow">INGRESOS</div><strong>${{ fmt(ingresos) }}</strong></div>
@@ -118,22 +118,7 @@
             día {{ revision.quincena.dias_transcurridos }} de {{ revision.quincena.dias_totales }}
           </div>
         </div>
-<div class="revision-saldo">
-      <div class="eyebrow proy"><i class="bi bi-graph-up"></i> Proyección</div>
-      <strong :class="revision.proyeccion.saldo_al_cerrar >= 0 ? 'pos' : 'neg'">
-        {{ revision.proyeccion.saldo_al_cerrar >= 0 ? '+' : '−' }}{{ fmt(Math.abs(revision.proyeccion.saldo_al_cerrar)) }}
-        <span class="unidad">{{ cod }}</span>
-      </strong>
-      <div class="sub proy-pie">
-        al {{ usaQuincena ? 'cerrar la quincena' : 'cerrar el mes' }}
       </div>
-    </div>
-      </div>
-
-      <div class="revision-bar" :title="'Vas ' + revision.quincena.dias_transcurridos + ' de ' + revision.quincena.dias_totales + ' días ' + (usaQuincena ? 'de la quincena' : 'del mes')">
-        <span :style="{ width: Math.round((revision.quincena.dias_transcurridos / revision.quincena.dias_totales) * 100) + '%' }"></span>
-      </div>
-
       <div class="grid-2 revision-nums">
         <div>
           <div class="eyebrow">GASTADO</div>
@@ -166,10 +151,6 @@
         </span>
       </p>
 
-<p class="sub revision-nota">
-        <i class="bi bi-info-circle"></i>
-        La proyección asume tu ritmo actual y lo fijo que falta. No anticipa ingresos.
-      </p>
     </section>
 
     <hr class="divider" />
@@ -290,6 +271,7 @@ function guardarCache() {
 
 // El backend ya decide el corte segun la preferencia del usuario; aqui solo se
 // usa para las rotulos. El fallback es MENSUAL porque es el default del producto.
+const balancePct = computed(() => (ingresos.value > 0 ? Math.round((balance.value / ingresos.value) * 100) : 0))
 const usaQuincena = computed(() => revision.value?.usa_quincena ?? false)
 /** Agenda diaria: fijos previstos vs registrados por dia */
 const totalPrevistos = ref(0)
@@ -445,4 +427,6 @@ onMounted(async () => {
 .agenda-item-previsto, .agenda-item-previsto .agenda-item-monto { color: var(--warning-text); }
 .agenda-vacio { text-align: center; padding: 18px 8px; color: var(--ink-soft); font-size: 13px; }
 
+.card-balance { margin-top: 12px; }
+.card-balance .big-number { color: var(--ink); }
 </style>
